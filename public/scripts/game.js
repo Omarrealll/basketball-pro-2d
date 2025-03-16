@@ -351,6 +351,10 @@ class BasketChaosPro {
         this.combo = 0;
         this.maxCombo = 0;
         
+        // Initialize audio
+        AudioManager.init();
+        AudioManager.playMusic('menu');
+        
         // Enhanced features
         this.powerupTypes = [
             { name: 'superJump', icon: '🦘', duration: 5000 },
@@ -369,15 +373,6 @@ class BasketChaosPro {
             survival: { name: 'Survival', icon: '💪', description: 'Three misses and you\'re out!' },
             trickshot: { name: 'Trick Shot', icon: '🎯', description: 'Points multiply with each bounce!' },
             versus: { name: 'Versus', icon: '⚔️', description: 'Battle against another player!' }
-        };
-
-        // Sound effects
-        this.sounds = {
-            bounce: new Audio('/assets/sounds/bounce.mp3'),
-            score: new Audio('/assets/sounds/score.mp3'),
-            powerup: new Audio('/assets/sounds/powerup.mp3'),
-            crowd: new Audio('/assets/sounds/crowd.mp3'),
-            music: new Audio('/assets/sounds/background.mp3')
         };
 
         // Initialize controls
@@ -693,9 +688,15 @@ class BasketChaosPro {
         // Initialize ball
         this.ball = this.createBall();
         
-        // Start background music
-        this.sounds.music.loop = true;
-        this.sounds.music.play();
+        // Start game music
+        AudioManager.playMusic('game');
+        
+        // Hide menu
+        document.getElementById('menu').style.display = 'none';
+        
+        // Show game UI
+        document.getElementById('game-ui').style.display = 'block';
+        document.getElementById('chat-container').style.display = 'block';
     }
 
     createPlayer(id, x) {
@@ -729,8 +730,106 @@ class BasketChaosPro {
 
 // Initialize game when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    new BasketChaosPro();
+    const game = new BasketChaosPro();
+    
+    // Play Button
+    document.getElementById('playButton').addEventListener('click', () => {
+        AudioManager.playSound('menuClick');
+        const selectedMode = document.querySelector('.game-mode-card.selected')?.dataset.mode || 'classic';
+        game.startGame(selectedMode);
+        document.getElementById('menu').style.display = 'none';
+    });
+
+    // Instructions Button
+    document.getElementById('instructionsButton').addEventListener('click', () => {
+        AudioManager.playSound('menuClick');
+        document.getElementById('instructions').style.display = 'block';
+    });
+
+    // Close Instructions Button
+    document.getElementById('closeInstructions').addEventListener('click', () => {
+        AudioManager.playSound('menuClick');
+        document.getElementById('instructions').style.display = 'none';
+    });
+
+    // Leaderboard Button
+    document.getElementById('leaderboardButton').addEventListener('click', () => {
+        AudioManager.playSound('menuClick');
+        document.getElementById('leaderboard').style.display = 'block';
+        updateLeaderboard('classic'); // Load classic mode leaderboard by default
+    });
+
+    // Close Leaderboard Button
+    document.getElementById('closeLeaderboard').addEventListener('click', () => {
+        AudioManager.playSound('menuClick');
+        document.getElementById('leaderboard').style.display = 'none';
+    });
+
+    // Game Mode Selection
+    const gameModeCards = document.getElementById('game-modes');
+    Object.entries(game.gameModes).forEach(([mode, data]) => {
+        const card = document.createElement('div');
+        card.className = 'game-mode-card';
+        card.dataset.mode = mode;
+        card.innerHTML = `
+            <div class="game-mode-icon">${data.icon}</div>
+            <h3>${data.name}</h3>
+            <p>${data.description}</p>
+        `;
+        card.addEventListener('click', () => {
+            AudioManager.playSound('menuClick');
+            document.querySelectorAll('.game-mode-card').forEach(c => c.classList.remove('selected'));
+            card.classList.add('selected');
+        });
+        gameModeCards.appendChild(card);
+    });
+
+    // Play Again Button
+    document.getElementById('play-again').addEventListener('click', () => {
+        AudioManager.playSound('menuClick');
+        document.getElementById('game-over').style.display = 'none';
+        game.startGame(game.currentMode);
+    });
+
+    // Change Mode Button
+    document.getElementById('change-mode').addEventListener('click', () => {
+        AudioManager.playSound('menuClick');
+        document.getElementById('game-over').style.display = 'none';
+        document.getElementById('menu').style.display = 'block';
+    });
+
+    // Leaderboard Tab Buttons
+    document.querySelectorAll('.tab-button').forEach(button => {
+        button.addEventListener('click', () => {
+            AudioManager.playSound('menuClick');
+            document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+            button.classList.add('active');
+            updateLeaderboard(button.dataset.mode);
+        });
+    });
+
+    // Initialize first game mode as selected
+    document.querySelector('.game-mode-card').classList.add('selected');
 });
+
+function updateLeaderboard(mode) {
+    fetch(`/api/leaderboard/${mode}`)
+        .then(response => response.json())
+        .then(data => {
+            const content = document.getElementById('leaderboard-content');
+            content.innerHTML = data.length ? data.map((entry, index) => `
+                <div class="leaderboard-entry">
+                    <span class="rank">#${index + 1}</span>
+                    <span class="name">${entry.name}</span>
+                    <span class="score">${entry.score}</span>
+                </div>
+            `).join('') : '<p>No scores yet!</p>';
+        })
+        .catch(error => {
+            console.error('Error fetching leaderboard:', error);
+            document.getElementById('leaderboard-content').innerHTML = '<p>Error loading leaderboard</p>';
+        });
+}
 
 // Add CSS styles for new UI elements
 const style = document.createElement('style');

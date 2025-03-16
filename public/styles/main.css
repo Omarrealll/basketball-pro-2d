@@ -151,6 +151,11 @@ body {
     box-shadow: 0 0 40px rgba(0, 0, 0, 0.8);
 }
 
+.modal.show {
+    display: block;
+    animation: fadeIn 0.3s ease-out;
+}
+
 .modal h2 {
     color: #4CAF50;
     margin-bottom: 20px;
@@ -607,4 +612,52 @@ body {
 @keyframes fadeOut {
     from { opacity: 1; }
     to { opacity: 0; }
+}
+
+/* Leaderboard Entries */
+.leaderboard-entry {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px;
+    margin: 5px 0;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+}
+
+.leaderboard-entry .rank {
+    font-weight: bold;
+    color: #4CAF50;
+    width: 40px;
+}
+
+.leaderboard-entry .name {
+    flex-grow: 1;
+    margin: 0 10px;
+}
+
+.leaderboard-entry .score {
+    font-weight: bold;
+    color: #ffd700;
+}
+
+/* Game Over Screen */
+#game-over {
+    text-align: center;
+}
+
+#game-over .stats {
+    margin: 20px 0;
+    padding: 15px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+}
+
+#game-over .achievements {
+    margin: 20px 0;
+}
+
+#game-over .achievements h3 {
+    color: #4CAF50;
+    margin-bottom: 10px;
 } 
