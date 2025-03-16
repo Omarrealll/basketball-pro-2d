@@ -224,6 +224,21 @@ class Game {
         this.gameMode = 'classic';
         this.isRunning = false;
         
+        // Initialize sounds
+        this.sounds = {
+            bounce: new Audio('data:audio/wav;base64,UklGRqgAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YYQAAAAzAIAAzQD/ALUA/wCAADMAAADN/wAAtf8AAIAAMwAAAM3/AAC1/wAAgAAzAAAAzf8AALX/AACAAAAAMwDNAP8AtQD/AIAAMQAAAP3/AAC9/wAAgAAAAAAA'),
+            score: new Audio('data:audio/wav;base64,UklGRn4AAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YVAAAAB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AA=='),
+            powerup: new Audio('data:audio/wav;base64,UklGRn4AAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YVAAAAB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AA==')
+        };
+
+        // Initialize power-up types
+        this.POWERUP_TYPES = {
+            DOUBLE_POINTS: { color: '#ffd700', duration: 10, symbol: '2×' },
+            BIGGER_BALL: { color: '#4CAF50', duration: 15, symbol: '⚪' },
+            SLOWER_BASKET: { color: '#2196F3', duration: 8, symbol: '⏱' },
+            PERFECT_SHOT: { color: '#9C27B0', duration: 5, symbol: '🎯' }
+        };
+
         // Game objects
         this.ball = {
             x: 100,
@@ -274,6 +289,10 @@ class Game {
         this.canvas.addEventListener('mousemove', this.handleMouseMove.bind(this));
         this.canvas.addEventListener('mousedown', this.handleMouseDown.bind(this));
         this.canvas.addEventListener('mouseup', this.handleMouseUp.bind(this));
+
+        // Set canvas size
+        this.canvas.width = 800;
+        this.canvas.height = 600;
     }
 
     start() {
@@ -310,7 +329,7 @@ class Game {
         this.ball.velocityX = Math.cos(angle) * power * 0.2;
         this.ball.velocityY = Math.sin(angle) * power * 0.2;
         this.ball.isShot = true;
-        sounds.bounce.play();
+        this.sounds.bounce.play();
     }
 
     gameLoop() {
@@ -497,11 +516,11 @@ class Game {
         // Check wall collisions
         if (this.ball.x < this.ball.radius || this.ball.x > this.canvas.width - this.ball.radius) {
             this.ball.velocityX *= -0.8;
-            sounds.bounce.play();
+            this.sounds.bounce.play();
         }
         if (this.ball.y < this.ball.radius) {
             this.ball.velocityY *= -0.8;
-            sounds.bounce.play();
+            this.sounds.bounce.play();
         }
 
         // Check basket collision
@@ -512,7 +531,7 @@ class Game {
             
             if (this.ball.velocityY > 0) {
                 this.score += 2;
-                sounds.score.play();
+                this.sounds.score.play();
                 this.resetBall();
             }
         }

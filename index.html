@@ -80,7 +80,7 @@
             border-top: 1px solid rgba(255, 255, 255, 0.2);
         }
 
-        #game-canvas {
+        #gameCanvas {
             border: 2px solid #333;
             background: #1a1a1a;
             max-width: 100%;
@@ -239,7 +239,7 @@
             <button id="start-game">Start Game</button>
         </div>
 
-        <canvas id="game-canvas" width="800" height="600"></canvas>
+        <canvas id="gameCanvas"></canvas>
 
         <div id="leaderboard">
             <h2>Leaderboard</h2>
@@ -270,11 +270,6 @@
 
         // Initialize socket connection
         function initSocket() {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const host = window.location.hostname === 'localhost' ? 
-                `${window.location.hostname}:3000` : 
-                window.location.host;
-            
             socket = io();
 
             socket.on('connect', () => {
@@ -291,7 +286,7 @@
 
         // Initialize game
         function initGame(gameMode) {
-            const canvas = document.getElementById('game-canvas');
+            const canvas = document.getElementById('gameCanvas');
             const menu = document.getElementById('menu');
             
             // Hide menu

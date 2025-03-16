@@ -64,6 +64,8 @@ io.on('connection', (socket) => {
                 room.players.delete(socket.id);
                 if (room.players.size === 0) {
                     gameRooms.delete(player.room);
+                } else {
+                    io.to(player.room).emit('player_left', { playerId: socket.id });
                 }
             }
         }
@@ -123,6 +125,12 @@ io.on('connection', (socket) => {
                 emote: data.emote
             });
         }
+    });
+
+    // Send initial game state
+    socket.emit('game_state', {
+        players: Array.from(players.values()),
+        rooms: Array.from(gameRooms.values())
     });
 });
 
