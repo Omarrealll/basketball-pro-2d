@@ -1,7 +1,7 @@
 #!/bin/bash
-chmod +x start.sh
+
+# Install dependencies
 npm install
-npm install -g pm2
-pm2 start server.js --name basketball-game
-pm2 save
-pm2 logs 
+
+# Start the server
+node server.js 

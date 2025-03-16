@@ -1,24 +1,20 @@
 require('dotenv').config();
 const express = require('express');
-const { createServer } = require('http');
-const { Server } = require('socket.io');
+const http = require('http');
+const socketIO = require('socket.io');
 const compression = require('compression');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
+const path = require('path');
 
 const app = express();
-const httpServer = createServer(app);
-const io = new Server(httpServer, {
-    cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-    }
-});
+const server = http.createServer(app);
+const io = socketIO(server);
 
 // Middleware
 app.use(compression());
 app.use(cors());
-app.use(express.static('.'));
+app.use(express.static(path.join(__dirname)));
 
 // Game constants
 const GAME_MODES = {
@@ -38,7 +34,7 @@ const ACHIEVEMENTS = {
 };
 
 // Game state
-const rooms = new Map();
+const gameRooms = new Map();
 const players = new Map();
 const tournaments = new Map();
 const leaderboards = {
@@ -47,152 +43,85 @@ const leaderboards = {
     allTime: new Map()
 };
 
-// Socket.IO connection handling
+// WebSocket connection handling
 io.on('connection', (socket) => {
     console.log('Player connected:', socket.id);
-    
-    const player = {
+
+    // Add player to the game
+    players.set(socket.id, {
         id: socket.id,
         room: null,
-        stats: {
-            gamesPlayed: 0,
-            wins: 0,
-            totalScore: 0,
-            achievements: new Set(),
-            powerUpsCollected: new Set(),
-            trickShots: 0,
-            tournamentWins: 0,
-            highestStreak: 0
-        }
-    };
-    
-    players.set(socket.id, player);
-
-    // Send initial data to player
-    socket.emit('init', {
-        playerId: socket.id,
-        stats: player.stats
-    });
-
-    // Handle room creation
-    socket.on('createRoom', ({ gameMode = GAME_MODES.CLASSIC }) => {
-        try {
-            const roomId = uuidv4().substring(0, 6);
-            const room = createRoom(roomId, gameMode);
-            joinRoom(socket, room);
-            socket.emit('roomCreated', { roomId, gameMode });
-        } catch (error) {
-            socket.emit('error', { message: 'Failed to create room' });
-            console.error('Room creation error:', error);
-        }
-    });
-
-    // Handle room joining
-    socket.on('joinRoom', ({ roomId }) => {
-        try {
-            const room = rooms.get(roomId);
-            if (!room) {
-                socket.emit('error', { message: 'Room not found' });
-                return;
-            }
-            joinRoom(socket, room);
-        } catch (error) {
-            socket.emit('error', { message: 'Failed to join room' });
-            console.error('Room join error:', error);
-        }
-    });
-
-    // Handle game updates
-    socket.on('gameUpdate', (data) => {
-        try {
-            const player = players.get(socket.id);
-            if (!player || !player.room) return;
-
-            const room = rooms.get(player.room);
-            if (!room) return;
-
-            updateGameState(room, socket.id, data);
-            broadcastGameState(room);
-        } catch (error) {
-            console.error('Game update error:', error);
-        }
-    });
-
-    // Handle player movement
-    socket.on('playerMove', (data) => {
-        try {
-            const player = players.get(socket.id);
-            if (!player || !player.room) return;
-
-            const room = rooms.get(player.room);
-            if (!room) return;
-
-            room.players[socket.id] = {
-                ...room.players[socket.id],
-                ...data
-            };
-
-            socket.to(player.room).emit('playerMoved', {
-                playerId: socket.id,
-                ...data
-            });
-        } catch (error) {
-            console.error('Player move error:', error);
-        }
-    });
-
-    // Handle shots
-    socket.on('shot', (data) => {
-        try {
-            const player = players.get(socket.id);
-            if (!player || !player.room) return;
-
-            const room = rooms.get(player.room);
-            if (!room) return;
-
-            handleShot(room, socket.id, data);
-        } catch (error) {
-            console.error('Shot error:', error);
-        }
-    });
-
-    // Handle score updates
-    socket.on('score', (data) => {
-        try {
-            const player = players.get(socket.id);
-            if (!player || !player.room) return;
-
-            const room = rooms.get(player.room);
-            if (!room) return;
-
-            handleScore(room, socket.id, data);
-        } catch (error) {
-            console.error('Score update error:', error);
-        }
-    });
-
-    // Handle power-up collection
-    socket.on('powerUpCollected', (data) => {
-        try {
-            const player = players.get(socket.id);
-            if (!player || !player.room) return;
-
-            const room = rooms.get(player.room);
-            if (!room) return;
-
-            handlePowerUpCollection(room, socket.id, data);
-        } catch (error) {
-            console.error('Power-up collection error:', error);
-        }
+        score: 0
     });
 
     // Handle disconnection
     socket.on('disconnect', () => {
-        try {
-            handlePlayerDisconnect(socket.id);
-            console.log('Player disconnected:', socket.id);
-        } catch (error) {
-            console.error('Disconnect error:', error);
+        console.log('Player disconnected:', socket.id);
+        const player = players.get(socket.id);
+        if (player && player.room) {
+            const room = gameRooms.get(player.room);
+            if (room) {
+                room.players.delete(socket.id);
+                if (room.players.size === 0) {
+                    gameRooms.delete(player.room);
+                }
+            }
+        }
+        players.delete(socket.id);
+    });
+
+    // Handle game events
+    socket.on('create_tournament', (data) => {
+        const roomId = Math.random().toString(36).substring(7);
+        gameRooms.set(roomId, {
+            id: roomId,
+            name: data.name,
+            players: new Set([socket.id]),
+            state: 'waiting'
+        });
+        
+        const player = players.get(socket.id);
+        player.room = roomId;
+        
+        socket.join(roomId);
+        socket.emit('tournament_created', { roomId });
+    });
+
+    socket.on('join_tournament', (data) => {
+        const room = gameRooms.get(data.roomId);
+        if (room && room.state === 'waiting') {
+            room.players.add(socket.id);
+            const player = players.get(socket.id);
+            player.room = data.roomId;
+            
+            socket.join(data.roomId);
+            if (room.players.size >= 2) {
+                room.state = 'playing';
+                io.to(data.roomId).emit('game_start');
+            }
+        }
+    });
+
+    socket.on('score_update', (data) => {
+        const player = players.get(socket.id);
+        if (player) {
+            player.score = data.score;
+            if (player.room) {
+                io.to(player.room).emit('scores', {
+                    playerId: socket.id,
+                    score: data.score
+                });
+            }
+        }
+    });
+
+    socket.on('emote', (data) => {
+        const player = players.get(socket.id);
+        if (player && player.room) {
+            io.to(player.room).emit('player_emote', {
+                playerId: socket.id,
+                emote: data.emote
+            });
         }
     });
 });
@@ -211,7 +140,7 @@ function createRoom(roomId, gameMode) {
         },
         settings: getGameSettings(gameMode)
     };
-    rooms.set(roomId, room);
+    gameRooms.set(roomId, room);
     return room;
 }
 
@@ -348,11 +277,11 @@ function updateLeaderboards(scores) {
 function handlePlayerDisconnect(playerId) {
     const player = players.get(playerId);
     if (player && player.room) {
-        const room = rooms.get(player.room);
+        const room = gameRooms.get(player.room);
         if (room) {
             delete room.players[playerId];
             if (Object.keys(room.players).length === 0) {
-                rooms.delete(player.room);
+                gameRooms.delete(player.room);
             } else {
                 io.to(player.room).emit('playerLeft', { playerId });
             }
@@ -434,6 +363,6 @@ function generateObstacles(gameMode) {
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 
-httpServer.listen(PORT, HOST, () => {
-    console.log(`Server running on port ${PORT}`);
+server.listen(PORT, HOST, () => {
+    console.log(`Server running on http://${HOST}:${PORT}`);
 }); 

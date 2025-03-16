@@ -215,325 +215,322 @@ class Player {
     }
 }
 
-// Game class enhancement
+// Game class
 class Game {
     constructor(canvas, socket) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
         this.socket = socket;
-        this.players = new Map();
-        this.balls = new Map();
-        this.powerUps = [];
-        this.obstacles = [];
-        this.gameMode = GAME_MODES.CLASSIC;
-        this.timeRemaining = 180;
-        this.tournament = null;
+        this.gameMode = 'classic';
+        this.isRunning = false;
         
-        this.setupEventListeners();
-        this.setupGameLoop();
-    }
+        // Game objects
+        this.ball = {
+            x: 100,
+            y: 500,
+            radius: 15,
+            color: '#ff6b6b',
+            velocityX: 0,
+            velocityY: 0,
+            isShot: false,
+            rotation: 0,
+            trail: []
+        };
 
-    setupEventListeners() {
-        // ... existing event listeners ...
+        this.basket = {
+            x: 700,
+            y: 300,
+            width: 60,
+            height: 50,
+            rimWidth: 10,
+            color: '#e94560',
+            netPoints: [],
+            moveSpeed: 1,
+            direction: 1
+        };
 
-        this.socket.addEventListener('message', (event) => {
-            const data = JSON.parse(event.data);
-            switch (data.type) {
-                case 'power_up_spawned':
-                    this.handlePowerUpSpawn(data.powerUp);
-                    break;
-                case 'achievement_unlocked':
-                    this.handleAchievementUnlock(data.achievement);
-                    break;
-                case 'tournament_match_ready':
-                    this.handleTournamentMatch(data);
-                    break;
-                // ... existing cases ...
-            }
-        });
-    }
-
-    handlePowerUpSpawn(powerUp) {
-        this.powerUps.push(powerUp);
-        this.showPowerUpSpawnAnimation(powerUp);
-    }
-
-    handleAchievementUnlock(achievement) {
-        this.showAchievementNotification(achievement);
-        this.updateAchievementsDisplay();
-    }
-
-    handleTournamentMatch(data) {
-        this.showTournamentMatchNotification(data);
-        // Automatically join the match room
-        this.socket.send(JSON.stringify({
-            type: 'join_room',
-            roomId: data.roomId,
-            gameMode: GAME_MODES.TOURNAMENT
-        }));
-    }
-
-    showAchievementNotification(achievement) {
-        const notification = document.createElement('div');
-        notification.className = 'achievement-notification';
-        notification.innerHTML = `
-            <h3>Achievement Unlocked!</h3>
-            <p>${achievement.name}</p>
-            <p>${achievement.description}</p>
-        `;
-        document.body.appendChild(notification);
-
-        // Animate and remove the notification
-        setTimeout(() => {
-            notification.classList.add('fade-out');
-            setTimeout(() => notification.remove(), 1000);
-        }, 3000);
-    }
-
-    showPowerUpSpawnAnimation(powerUp) {
-        const animation = document.createElement('div');
-        animation.className = 'power-up-spawn';
-        animation.style.backgroundColor = powerUp.color;
-        animation.style.left = `${powerUp.x}px`;
-        animation.style.top = `${powerUp.y}px`;
-        document.body.appendChild(animation);
-
-        // Remove the animation element after it's done
-        setTimeout(() => animation.remove(), 1000);
-    }
-
-    showTournamentMatchNotification(data) {
-        const notification = document.createElement('div');
-        notification.className = 'tournament-notification';
-        notification.innerHTML = `
-            <h3>Tournament Match Ready!</h3>
-            <p>Your opponent is waiting</p>
-            <button onclick="this.parentElement.remove()">Let's Go!</button>
-        `;
-        document.body.appendChild(notification);
-    }
-
-    update() {
-        // Update game state
-        this.updatePlayers();
-        this.updateBalls();
-        this.updatePowerUps();
-        this.updateObstacles();
-        this.updateTime();
-
-        // Check for collisions
-        this.checkCollisions();
-
-        // Update UI
-        this.updateUI();
-    }
-
-    updatePlayers() {
-        for (const player of this.players.values()) {
-            player.update();
+        // Initialize net points
+        for (let i = 0; i < 10; i++) {
+            this.basket.netPoints.push({
+                x: this.basket.x + i * (this.basket.width / 9),
+                y: this.basket.y + this.basket.height,
+                baseY: this.basket.y + this.basket.height,
+                velocity: 0
+            });
         }
+
+        // Game state
+        this.score = 0;
+        this.gameTime = 60;
+        this.isGameOver = false;
+        this.isPoweringUp = false;
+        this.power = 0;
+        this.mouseX = 0;
+        this.mouseY = 0;
+        this.activePowerups = new Map();
+        this.lastEmoteTime = 0;
+
+        // Bind event listeners
+        this.canvas.addEventListener('mousemove', this.handleMouseMove.bind(this));
+        this.canvas.addEventListener('mousedown', this.handleMouseDown.bind(this));
+        this.canvas.addEventListener('mouseup', this.handleMouseUp.bind(this));
     }
 
-    updatePowerUps() {
-        // Check for power-up collisions
-        for (const powerUp of this.powerUps) {
-            const player = this.players.get(this.socket.playerId);
-            if (player && this.checkPowerUpCollision(player, powerUp)) {
-                this.collectPowerUp(player, powerUp);
-            }
-        }
+    start() {
+        if (this.isRunning) return;
+        this.isRunning = true;
+        this.gameLoop();
     }
 
-    updateObstacles() {
-        for (const obstacle of this.obstacles) {
-            if (obstacle.type === 'platform' && obstacle.movementRange) {
-                // Update moving platform position
-                obstacle.x += obstacle.speed;
-                if (obstacle.x > obstacle.startX + obstacle.movementRange || 
-                    obstacle.x < obstacle.startX) {
-                    obstacle.speed *= -1;
-                }
-            }
-        }
+    stop() {
+        this.isRunning = false;
     }
 
-    updateTime() {
-        if (this.timeRemaining > 0) {
-            this.timeRemaining -= 1/60;
-            if (this.timeRemaining <= 0) {
-                this.handleGameEnd();
-            }
-        }
+    handleMouseMove(event) {
+        const rect = this.canvas.getBoundingClientRect();
+        this.mouseX = event.clientX - rect.left;
+        this.mouseY = event.clientY - rect.top;
     }
 
-    checkPowerUpCollision(player, powerUp) {
-        const dx = player.x - powerUp.x;
-        const dy = player.y - powerUp.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        return distance < 30; // Collision radius
+    handleMouseDown(event) {
+        if (this.isGameOver) return;
+        this.isPoweringUp = true;
+        this.power = 0;
     }
 
-    collectPowerUp(player, powerUp) {
-        // Remove power-up from the game
-        this.powerUps = this.powerUps.filter(p => p.id !== powerUp.id);
-
-        // Apply power-up effect to player
-        player.addPowerUp(powerUp);
-
-        // Notify server
-        this.socket.send(JSON.stringify({
-            type: 'power_up_used',
-            powerUpId: powerUp.id
-        }));
+    handleMouseUp(event) {
+        if (this.isGameOver || !this.isPoweringUp) return;
+        this.isPoweringUp = false;
+        this.shootBall();
     }
 
-    handleGameEnd() {
-        // Show game end screen with stats
-        const gameEndScreen = document.createElement('div');
-        gameEndScreen.className = 'game-end-screen';
-        gameEndScreen.innerHTML = `
-            <h2>Game Over!</h2>
-            <div class="stats">
-                <p>Final Score: ${this.players.get(this.socket.playerId).score}</p>
-                <p>Highest Streak: ${this.players.get(this.socket.playerId).highestStreak}</p>
-                <p>Power-ups Collected: ${this.players.get(this.socket.playerId).activePowerUps.size}</p>
-            </div>
-            <button onclick="location.reload()">Play Again</button>
-        `;
-        document.body.appendChild(gameEndScreen);
+    shootBall() {
+        const angle = Math.atan2(this.mouseY - this.ball.y, this.mouseX - this.ball.x);
+        const power = Math.min(this.power, 100);
+        this.ball.velocityX = Math.cos(angle) * power * 0.2;
+        this.ball.velocityY = Math.sin(angle) * power * 0.2;
+        this.ball.isShot = true;
+        sounds.bounce.play();
     }
 
-    render() {
+    gameLoop() {
+        if (!this.isRunning) return;
+
         // Clear canvas
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-        // Draw background based on game mode
-        this.drawBackground();
+        // Update game state
+        this.update();
 
-        // Draw obstacles
-        this.drawObstacles();
+        // Draw game objects
+        this.draw();
 
-        // Draw power-ups
-        this.drawPowerUps();
-
-        // Draw players
-        this.drawPlayers();
-
-        // Draw balls
-        this.drawBalls();
-
-        // Draw UI
-        this.drawUI();
+        // Request next frame
+        requestAnimationFrame(this.gameLoop.bind(this));
     }
 
-    drawBackground() {
-        switch (this.gameMode) {
-            case GAME_MODES.BATTLE_ROYALE:
-                this.drawBattleRoyaleBackground();
-                break;
-            case GAME_MODES.TRICK_SHOT:
-                this.drawTrickShotBackground();
-                break;
-            default:
-                this.drawClassicBackground();
+    update() {
+        // Update power meter
+        if (this.isPoweringUp) {
+            this.power = Math.min(this.power + 2, 100);
         }
+
+        // Update ball position
+        if (this.ball.isShot) {
+            this.ball.x += this.ball.velocityX;
+            this.ball.y += this.ball.velocityY;
+            this.ball.velocityY += 0.5; // Gravity
+            this.ball.rotation += this.ball.velocityX * 0.1;
+
+            // Ball trail
+            this.ball.trail.push({ x: this.ball.x, y: this.ball.y });
+            if (this.ball.trail.length > 10) {
+                this.ball.trail.shift();
+            }
+
+            // Check for collisions
+            this.checkCollisions();
+        }
+
+        // Update basket movement
+        this.basket.y += this.basket.moveSpeed * this.basket.direction;
+        if (this.basket.y > this.canvas.height - 100 || this.basket.y < 100) {
+            this.basket.direction *= -1;
+        }
+
+        // Update net physics
+        this.updateNet();
     }
 
-    drawBattleRoyaleBackground() {
-        // Draw shrinking court
-        const progress = this.timeRemaining / 300; // 5 minutes total
-        const courtSize = Math.max(200, this.canvas.width * progress);
-        const courtX = (this.canvas.width - courtSize) / 2;
-        
-        this.ctx.fillStyle = '#333';
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-        this.ctx.fillStyle = '#666';
-        this.ctx.fillRect(courtX, 0, courtSize, this.canvas.height);
-    }
-
-    drawTrickShotBackground() {
-        // Draw special trick shot elements
+    draw() {
+        // Draw background
         this.ctx.fillStyle = '#1a1a1a';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-        
-        // Draw bounce guides
-        this.ctx.strokeStyle = '#444';
-        this.ctx.setLineDash([5, 5]);
+
+        // Draw ball trail
+        this.drawBallTrail();
+
+        // Draw ball
+        this.drawBall();
+
+        // Draw basket
+        this.drawBasket();
+
+        // Draw power meter
+        if (this.isPoweringUp) {
+            this.drawPowerMeter();
+        }
+
+        // Draw score
+        this.drawScore();
+    }
+
+    drawBallTrail() {
         this.ctx.beginPath();
-        for (let i = 0; i < this.canvas.width; i += 100) {
-            this.ctx.moveTo(i, 0);
-            this.ctx.lineTo(i, this.canvas.height);
-        }
-        this.ctx.stroke();
-        this.ctx.setLineDash([]);
-    }
-
-    drawClassicBackground() {
-        this.ctx.fillStyle = '#222';
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-    }
-
-    drawObstacles() {
-        for (const obstacle of this.obstacles) {
-            this.ctx.fillStyle = obstacle.type === 'wall' ? '#666' : '#444';
-            this.ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
-            
-            if (obstacle.type === 'barrier' && obstacle.health) {
-                // Draw health bar
-                this.ctx.fillStyle = '#f00';
-                const healthHeight = (obstacle.health / 3) * obstacle.height;
-                this.ctx.fillRect(obstacle.x, obstacle.y + obstacle.height - healthHeight, 
-                    obstacle.width, healthHeight);
+        this.ball.trail.forEach((pos, i) => {
+            const alpha = i / this.ball.trail.length;
+            this.ctx.strokeStyle = `rgba(255, 107, 107, ${alpha})`;
+            this.ctx.lineWidth = 2;
+            if (i === 0) {
+                this.ctx.moveTo(pos.x, pos.y);
+            } else {
+                this.ctx.lineTo(pos.x, pos.y);
             }
-        }
+        });
+        this.ctx.stroke();
     }
 
-    drawPowerUps() {
-        for (const powerUp of this.powerUps) {
-            this.ctx.fillStyle = powerUp.color;
-            this.ctx.beginPath();
-            this.ctx.arc(powerUp.x, powerUp.y, 15, 0, Math.PI * 2);
-            this.ctx.fill();
-
-            // Draw power-up icon or symbol
-            this.ctx.fillStyle = '#fff';
-            this.ctx.font = '12px Arial';
-            this.ctx.textAlign = 'center';
-            this.ctx.fillText(powerUp.type[0], powerUp.x, powerUp.y + 4);
-        }
+    drawBall() {
+        this.ctx.save();
+        this.ctx.translate(this.ball.x, this.ball.y);
+        this.ctx.rotate(this.ball.rotation);
+        this.ctx.beginPath();
+        this.ctx.arc(0, 0, this.ball.radius, 0, Math.PI * 2);
+        this.ctx.fillStyle = this.ball.color;
+        this.ctx.fill();
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = 2;
+        this.ctx.stroke();
+        
+        // Draw ball lines
+        this.ctx.beginPath();
+        this.ctx.moveTo(-this.ball.radius, 0);
+        this.ctx.lineTo(this.ball.radius, 0);
+        this.ctx.moveTo(0, -this.ball.radius);
+        this.ctx.lineTo(0, this.ball.radius);
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = 1;
+        this.ctx.stroke();
+        this.ctx.restore();
     }
 
-    drawUI() {
-        // Draw time remaining
+    drawBasket() {
+        // Draw backboard
+        this.ctx.fillStyle = '#fff';
+        this.ctx.fillRect(this.basket.x + this.basket.width, 
+                         this.basket.y - 50, 
+                         10, 
+                         100);
+
+        // Draw rim
+        this.ctx.beginPath();
+        this.ctx.moveTo(this.basket.x, this.basket.y);
+        this.ctx.lineTo(this.basket.x + this.basket.width, this.basket.y);
+        this.ctx.strokeStyle = this.basket.color;
+        this.ctx.lineWidth = this.basket.rimWidth;
+        this.ctx.stroke();
+
+        // Draw net
+        this.drawNet();
+    }
+
+    drawNet() {
+        this.ctx.beginPath();
+        this.ctx.moveTo(this.basket.netPoints[0].x, this.basket.netPoints[0].y);
+        for (let i = 1; i < this.basket.netPoints.length; i++) {
+            const point = this.basket.netPoints[i];
+            this.ctx.lineTo(point.x, point.y);
+        }
+        this.ctx.strokeStyle = '#fff';
+        this.ctx.lineWidth = 1;
+        this.ctx.stroke();
+    }
+
+    updateNet() {
+        this.basket.netPoints.forEach(point => {
+            const targetY = point.baseY;
+            const dy = targetY - point.y;
+            point.velocity += dy * 0.1;
+            point.velocity *= 0.8;
+            point.y += point.velocity;
+        });
+    }
+
+    drawPowerMeter() {
+        const meterWidth = 200;
+        const meterHeight = 20;
+        const x = (this.canvas.width - meterWidth) / 2;
+        const y = this.canvas.height - 50;
+
+        // Draw background
+        this.ctx.fillStyle = '#333';
+        this.ctx.fillRect(x, y, meterWidth, meterHeight);
+
+        // Draw power level
+        this.ctx.fillStyle = `hsl(${120 * (1 - this.power / 100)}, 100%, 50%)`;
+        this.ctx.fillRect(x, y, meterWidth * (this.power / 100), meterHeight);
+
+        // Draw border
+        this.ctx.strokeStyle = '#fff';
+        this.ctx.lineWidth = 2;
+        this.ctx.strokeRect(x, y, meterWidth, meterHeight);
+    }
+
+    drawScore() {
         this.ctx.fillStyle = '#fff';
         this.ctx.font = '24px Arial';
-        this.ctx.textAlign = 'center';
-        const minutes = Math.floor(this.timeRemaining / 60);
-        const seconds = Math.floor(this.timeRemaining % 60);
-        this.ctx.fillText(`${minutes}:${seconds.toString().padStart(2, '0')}`, 
-            this.canvas.width / 2, 30);
+        this.ctx.textAlign = 'left';
+        this.ctx.fillText(`Score: ${this.score}`, 20, 40);
+    }
 
-        // Draw active power-ups
-        const player = this.players.get(this.socket.playerId);
-        if (player) {
-            let i = 0;
-            for (const [powerUpId, powerUp] of player.activePowerUps) {
-                const timeLeft = Math.ceil((powerUp.expiryTime - Date.now()) / 1000);
-                this.ctx.fillStyle = POWER_UP_EFFECTS[powerUp.type].color;
-                this.ctx.fillRect(10 + i * 60, 10, 50, 50);
-                this.ctx.fillStyle = '#fff';
-                this.ctx.fillText(timeLeft, 35 + i * 60, 40);
-                i++;
+    checkCollisions() {
+        // Check wall collisions
+        if (this.ball.x < this.ball.radius || this.ball.x > this.canvas.width - this.ball.radius) {
+            this.ball.velocityX *= -0.8;
+            sounds.bounce.play();
+        }
+        if (this.ball.y < this.ball.radius) {
+            this.ball.velocityY *= -0.8;
+            sounds.bounce.play();
+        }
+
+        // Check basket collision
+        if (this.ball.y > this.basket.y - this.ball.radius && 
+            this.ball.y < this.basket.y + this.ball.radius && 
+            this.ball.x > this.basket.x && 
+            this.ball.x < this.basket.x + this.basket.width) {
+            
+            if (this.ball.velocityY > 0) {
+                this.score += 2;
+                sounds.score.play();
+                this.resetBall();
             }
         }
 
-        // Draw streak counter
-        if (player && player.streak > 0) {
-            this.ctx.fillStyle = '#fff';
-            this.ctx.font = '36px Arial';
-            this.ctx.textAlign = 'center';
-            this.ctx.fillText(`${player.streak}x`, this.canvas.width - 50, 50);
+        // Reset ball if it goes off screen
+        if (this.ball.y > this.canvas.height + 50) {
+            this.resetBall();
         }
+    }
+
+    resetBall() {
+        this.ball.x = 100;
+        this.ball.y = 500;
+        this.ball.velocityX = 0;
+        this.ball.velocityY = 0;
+        this.ball.isShot = false;
+        this.ball.rotation = 0;
+        this.ball.trail = [];
     }
 }
 

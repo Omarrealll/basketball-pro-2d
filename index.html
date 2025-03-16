@@ -80,6 +80,13 @@
             border-top: 1px solid rgba(255, 255, 255, 0.2);
         }
 
+        #game-canvas {
+            border: 2px solid #333;
+            background: #1a1a1a;
+            max-width: 100%;
+            max-height: 100vh;
+        }
+
         #leaderboard {
             position: absolute;
             top: 20px;
@@ -121,10 +128,6 @@
             justify-content: center;
         }
 
-        #game-canvas {
-            border: 2px solid #333;
-        }
-
         #emote-wheel {
             position: absolute;
             display: none;
@@ -154,42 +157,50 @@
             background: rgba(255, 255, 255, 0.2);
         }
 
-        #power-up-indicator {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            display: flex;
-            gap: 10px;
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px;
+            transition: background 0.2s;
         }
 
-        .power-up-slot {
-            width: 50px;
-            height: 50px;
-            background: rgba(0, 0, 0, 0.8);
+        button:hover {
+            background: #45a049;
+        }
+
+        input {
+            padding: 10px;
+            margin: 10px;
+            border-radius: 5px;
+            border: none;
+            font-size: 16px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+
+        input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 15px 20px;
             border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
+            animation: slideIn 0.3s ease-out;
         }
 
-        #streak-counter {
-            position: absolute;
-            top: 20px;
-            right: 250px;
-            font-size: 48px;
-            font-weight: bold;
-            color: #4CAF50;
-            text-shadow: 0 0 10px rgba(76, 175, 80, 0.5);
-        }
-
-        @keyframes bounce {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.2); }
-        }
-
-        .streak-animation {
-            animation: bounce 0.5s ease-in-out;
+        @keyframes slideIn {
+            from { transform: translateX(100%); }
+            to { transform: translateX(0); }
         }
     </style>
 </head>
@@ -199,7 +210,7 @@
             <h1>2D Basketball Pro</h1>
             <div class="menu-section">
                 <h2>Select Game Mode</h2>
-                <div class="game-mode" data-mode="classic">
+                <div class="game-mode selected" data-mode="classic">
                     <h3>Classic</h3>
                     <p>Traditional basketball gameplay with power-ups</p>
                 </div>
@@ -228,7 +239,7 @@
             <button id="start-game">Start Game</button>
         </div>
 
-        <canvas id="game-canvas"></canvas>
+        <canvas id="game-canvas" width="800" height="600"></canvas>
 
         <div id="leaderboard">
             <h2>Leaderboard</h2>
@@ -246,10 +257,6 @@
         </div>
 
         <div id="emote-wheel"></div>
-
-        <div id="power-up-indicator"></div>
-
-        <div id="streak-counter"></div>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
@@ -258,7 +265,52 @@
         // Initialize game modes
         const gameModes = document.querySelectorAll('.game-mode');
         let selectedMode = 'classic';
+        let game = null;
+        let socket = null;
 
+        // Initialize socket connection
+        function initSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const host = window.location.hostname === 'localhost' ? 
+                `${window.location.hostname}:3000` : 
+                window.location.host;
+            
+            socket = io();
+
+            socket.on('connect', () => {
+                console.log('Connected to server');
+            });
+
+            socket.on('disconnect', () => {
+                console.log('Disconnected from server');
+                showNotification('Lost connection to server. Trying to reconnect...');
+            });
+
+            return socket;
+        }
+
+        // Initialize game
+        function initGame(gameMode) {
+            const canvas = document.getElementById('game-canvas');
+            const menu = document.getElementById('menu');
+            
+            // Hide menu
+            menu.classList.add('hidden');
+            
+            // Initialize socket if not already done
+            if (!socket) {
+                socket = initSocket();
+            }
+            
+            // Create new game instance
+            game = new Game(canvas, socket);
+            game.gameMode = gameMode;
+            
+            // Start game loop
+            game.start();
+        }
+
+        // Event listeners
         gameModes.forEach(mode => {
             mode.addEventListener('click', () => {
                 gameModes.forEach(m => m.classList.remove('selected'));
@@ -267,23 +319,22 @@
             });
         });
 
-        // Tournament handling
+        document.getElementById('start-game').addEventListener('click', () => {
+            initGame(selectedMode);
+        });
+
         document.getElementById('create-tournament').addEventListener('click', () => {
-            socket.send(JSON.stringify({
-                type: 'create_tournament',
+            if (!socket) {
+                socket = initSocket();
+            }
+            socket.emit('create_tournament', {
                 name: `Tournament ${Math.random().toString(36).substring(7)}`
-            }));
+            });
         });
 
         document.getElementById('join-tournament').addEventListener('click', () => {
             const input = document.getElementById('tournament-code-input');
             input.style.display = input.style.display === 'none' ? 'block' : 'none';
-        });
-
-        // Start game
-        document.getElementById('start-game').addEventListener('click', () => {
-            document.getElementById('menu').classList.add('hidden');
-            initGame(selectedMode);
         });
 
         // Initialize achievements
@@ -329,15 +380,27 @@
                 button.style.top = `${100 + Math.sin(angle) * radius}px`;
                 
                 button.addEventListener('click', () => {
-                    socket.send(JSON.stringify({
-                        type: 'emote',
-                        emote: emote
-                    }));
+                    if (socket) {
+                        socket.emit('emote', { emote });
+                    }
                     wheel.style.display = 'none';
                 });
                 
                 wheel.appendChild(button);
             });
+        }
+
+        // Show notification
+        function showNotification(message, duration = 3000) {
+            const notification = document.createElement('div');
+            notification.className = 'notification';
+            notification.textContent = message;
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                notification.style.opacity = '0';
+                setTimeout(() => notification.remove(), 300);
+            }, duration);
         }
 
         // Initialize everything when the page loads
