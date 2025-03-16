@@ -196,12 +196,13 @@ function checkAchievements(player, gameState) {
 io.on('connection', (socket) => {
     console.log('Player connected:', socket.id);
 
-    // Initialize player data
+    // Initialize player
+    const playerName = `Player ${socket.id.substr(0, 4)}`;
     players.set(socket.id, {
         id: socket.id,
-        room: null,
+        name: playerName,
         score: 0,
-        name: `Player ${socket.id.substr(0, 4)}`,
+        room: null,
         achievements: new Set(),
         consecutiveBaskets: 0,
         misses: 0,
@@ -210,11 +211,41 @@ io.on('connection', (socket) => {
         collectedPowerups: new Set()
     });
 
-    // Send initial data
-    socket.emit('init', {
-        playerId: socket.id,
-        achievements: ACHIEVEMENTS,
-        leaderboard: leaderboard.getLeaderboardData()
+    // Send welcome message
+    const welcomeMessage = {
+        id: uuidv4(),
+        player: 'System',
+        message: `${playerName} joined the game`,
+        timestamp: Date.now()
+    };
+    
+    chatHistory.push(welcomeMessage);
+    if (chatHistory.length > CHAT_HISTORY_LENGTH) {
+        chatHistory.shift();
+    }
+    
+    // Send chat history to new player
+    socket.emit('chat_history', chatHistory);
+    io.emit('chat_message', welcomeMessage);
+
+    // Handle chat messages
+    socket.on('chat_message', (data) => {
+        const player = players.get(socket.id);
+        if (!player) return;
+
+        const messageObj = {
+            id: uuidv4(),
+            player: player.name,
+            message: data.message.slice(0, 200), // Limit message length
+            timestamp: Date.now()
+        };
+
+        chatHistory.push(messageObj);
+        if (chatHistory.length > CHAT_HISTORY_LENGTH) {
+            chatHistory.shift();
+        }
+
+        io.emit('chat_message', messageObj);
     });
 
     // Handle score updates
@@ -222,107 +253,55 @@ io.on('connection', (socket) => {
         const player = players.get(socket.id);
         if (!player) return;
 
-        // Update player stats
         player.score = data.score;
-        
-        if (data.isBasket) {
-            player.consecutiveBaskets++;
-            
-            // Check for quick baskets
-            const now = Date.now();
-            if (now - player.lastBasketTime < 30000) { // Within 30 seconds
-                player.quickBaskets++;
-            } else {
-                player.quickBaskets = 1;
-            }
-            player.lastBasketTime = now;
-        } else {
-            player.consecutiveBaskets = 0;
-            player.misses++;
-        }
-
-        // Check for achievements
-        const newAchievements = checkAchievements(player, gameState);
-        if (newAchievements.length > 0) {
-            socket.emit('achievements_earned', { achievements: newAchievements });
-        }
-
-        // Update leaderboard
-        const leaderboardData = leaderboard.addScore(socket.id, player.score);
-        io.emit('leaderboard_update', leaderboardData);
+        io.emit('score_update', {
+            playerId: socket.id,
+            playerName: player.name,
+            score: data.score,
+            isBasket: data.isBasket
+        });
     });
 
-    // Handle powerup collection
-    socket.on('powerup_collected', (data) => {
+    // Handle game end
+    socket.on('game_end', (data) => {
         const player = players.get(socket.id);
         if (!player) return;
 
-        player.collectedPowerups.add(data.powerupType);
-        
-        // Check for achievements
-        const newAchievements = checkAchievements(player, gameState);
-        if (newAchievements.length > 0) {
-            socket.emit('achievements_earned', { achievements: newAchievements });
-        }
-    });
-
-    // Send chat history to new player
-    socket.emit('chat_history', chatHistory);
-
-    // Handle chat messages
-    socket.on('chat_message', (data) => {
-        const player = players.get(socket.id);
-        if (!player) return;
-
-        // Check cooldown
-        const now = Date.now();
-        const lastTime = lastMessageTime.get(socket.id) || 0;
-        if (now - lastTime < CHAT_COOLDOWN) {
-            socket.emit('chat_error', { message: 'Please wait before sending another message' });
-            return;
-        }
-
-        // Update cooldown
-        lastMessageTime.set(socket.id, now);
-
-        // Create message object
-        const messageObj = {
+        const gameEndMessage = {
             id: uuidv4(),
-            player: player.name,
-            message: data.message.slice(0, 200), // Limit message length
-            timestamp: now
+            player: 'System',
+            message: `${player.name} finished with score: ${data.score}`,
+            timestamp: Date.now()
         };
 
-        // Add to history
-        chatHistory.push(messageObj);
+        chatHistory.push(gameEndMessage);
         if (chatHistory.length > CHAT_HISTORY_LENGTH) {
             chatHistory.shift();
         }
 
-        // Broadcast to all players or room
-        if (player.room) {
-            io.to(player.room).emit('chat_message', messageObj);
-        } else {
-            io.emit('chat_message', messageObj);
-        }
+        io.emit('chat_message', gameEndMessage);
     });
 
     // Handle disconnection
     socket.on('disconnect', () => {
-        console.log('Player disconnected:', socket.id);
         const player = players.get(socket.id);
-        if (player && player.room) {
-            const room = gameRooms.get(player.room);
-            if (room) {
-                room.players.delete(socket.id);
-                if (room.players.size === 0) {
-                    gameRooms.delete(player.room);
-                } else {
-                    io.to(player.room).emit('player_left', { playerId: socket.id });
-                }
+        if (player) {
+            const disconnectMessage = {
+                id: uuidv4(),
+                player: 'System',
+                message: `${player.name} left the game`,
+                timestamp: Date.now()
+            };
+
+            chatHistory.push(disconnectMessage);
+            if (chatHistory.length > CHAT_HISTORY_LENGTH) {
+                chatHistory.shift();
             }
+
+            io.emit('chat_message', disconnectMessage);
+            players.delete(socket.id);
         }
-        players.delete(socket.id);
+        console.log('Player disconnected:', socket.id);
     });
 
     // Handle game events
@@ -612,5 +591,5 @@ const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 
 server.listen(PORT, HOST, () => {
-    console.log(`Server running on http://${HOST}:${PORT}`);
+    console.log(`Server running at http://${HOST}:${PORT}/`);
 }); 

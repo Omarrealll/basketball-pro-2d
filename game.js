@@ -343,35 +343,23 @@ class Game {
         this.canvas.width = 800;
         this.canvas.height = 600;
         
-        // Initialize sounds
-        this.sounds = {
-            bounce: new Audio('data:audio/wav;base64,UklGRqgAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YYQAAAAzAIAAzQD/ALUA/wCAADMAAADN/wAAtf8AAIAAMwAAAM3/AAC1/wAAgAAzAAAAzf8AALX/AACAAAAAMwDNAP8AtQD/AIAAMQAAAP3/AAC9/wAAgAAAAAAA'),
-            score: new Audio('data:audio/wav;base64,UklGRn4AAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YVAAAAB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AA=='),
-            powerup: new Audio('data:audio/wav;base64,UklGRn4AAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YVAAAAB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AA==')
-        };
-
         // Initialize game objects
         this.resetGame();
-
+        
         // Bind event listeners
         this.canvas.addEventListener('mousemove', this.handleMouseMove.bind(this));
         this.canvas.addEventListener('mousedown', this.handleMouseDown.bind(this));
         this.canvas.addEventListener('mouseup', this.handleMouseUp.bind(this));
-
-        // Socket event handlers
-        if (this.socket) {
-            this.socket.on('game_update', this.handleGameUpdate.bind(this));
-            this.socket.on('player_joined', this.handlePlayerJoined.bind(this));
-            this.socket.on('player_left', this.handlePlayerLeft.bind(this));
-            this.socket.on('powerup_spawned', this.handlePowerupSpawned.bind(this));
-            this.socket.on('game_end', this.handleGameEnd.bind(this));
-        }
-
-        // Initialize audio
-        AudioManager.init();
         
-        // Start menu music
-        AudioManager.playMusic('menu');
+        // Initialize game state
+        this.isPoweringUp = false;
+        this.power = 0;
+        this.mouseX = 0;
+        this.mouseY = 0;
+        
+        // Initialize shot arrow
+        this.showArrow = false;
+        this.arrowLength = 50;
     }
 
     resetGame() {
@@ -379,75 +367,174 @@ class Game {
         this.score = 0;
         this.gameTime = 60;
         this.isGameOver = false;
-        this.isPoweringUp = false;
-        this.power = 0;
-        this.mouseX = 0;
-        this.mouseY = 0;
-        this.activePowerups = new Map();
-
+        
         // Reset ball
         this.ball = {
             x: 100,
             y: 500,
             radius: 15,
-            color: '#ff6b6b',
             velocityX: 0,
             velocityY: 0,
             isShot: false,
-            rotation: 0,
-            trail: []
+            rotation: 0
         };
-
+        
         // Reset basket
         this.basket = {
             x: 700,
             y: 300,
             width: 60,
             height: 50,
-            rimWidth: 10,
-            color: '#e94560',
-            netPoints: [],
-            moveSpeed: 1,
-            direction: 1
+            rimWidth: 10
         };
-
-        // Initialize net points
-        this.basket.netPoints = [];
-        for (let i = 0; i < 10; i++) {
-            this.basket.netPoints.push({
-                x: this.basket.x + i * (this.basket.width / 9),
-                y: this.basket.y + this.basket.height,
-                baseY: this.basket.y + this.basket.height,
-                velocity: 0
-            });
-        }
-
-        // Update UI
-        this.updateUI();
     }
 
     start() {
         if (this.isRunning) return;
         this.isRunning = true;
         this.resetGame();
-        
-        // Switch to game music
-        AudioManager.playMusic('game');
-        
         this.gameLoop();
+        
+        // Hide menu and show game UI
+        document.getElementById('menu').style.display = 'none';
+        document.getElementById('game-ui').style.display = 'flex';
+        document.getElementById('chat-container').style.display = 'flex';
     }
 
-    stop() {
-        this.isRunning = false;
+    gameLoop() {
+        if (!this.isRunning) return;
+        
+        this.update();
+        this.draw();
+        requestAnimationFrame(() => this.gameLoop());
     }
 
-    updateUI() {
-        // Update score and time display
-        updateGameUI(this.score, this.gameTime);
+    update() {
+        if (this.isGameOver) return;
+        
+        // Update game time
+        this.gameTime -= 1/60;
+        if (this.gameTime <= 0) {
+            this.gameTime = 0;
+            this.isGameOver = true;
+            this.handleGameEnd();
+            return;
+        }
 
-        // Update power meter if powering up
+        // Update ball physics
+        if (this.ball.isShot) {
+            // Apply gravity
+            this.ball.velocityY += 0.5;
+            
+            // Update position
+            this.ball.x += this.ball.velocityX;
+            this.ball.y += this.ball.velocityY;
+            
+            // Update rotation
+            this.ball.rotation += this.ball.velocityX * 0.1;
+            
+            // Check collisions
+            this.checkCollisions();
+        }
+
+        // Update UI
+        this.updateUI();
+    }
+
+    draw() {
+        // Clear canvas
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        // Draw background
+        this.ctx.fillStyle = '#1a1a1a';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        // Draw basket
+        this.ctx.fillStyle = '#e94560';
+        this.ctx.fillRect(this.basket.x, this.basket.y, this.basket.width, this.basket.height);
+        
+        // Draw ball
+        this.ctx.save();
+        this.ctx.translate(this.ball.x, this.ball.y);
+        this.ctx.rotate(this.ball.rotation);
+        this.ctx.beginPath();
+        this.ctx.arc(0, 0, this.ball.radius, 0, Math.PI * 2);
+        this.ctx.fillStyle = '#ff6b6b';
+        this.ctx.fill();
+        
+        // Draw ball lines
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
+        this.ctx.moveTo(-this.ball.radius, 0);
+        this.ctx.lineTo(this.ball.radius, 0);
+        this.ctx.stroke();
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, -this.ball.radius);
+        this.ctx.lineTo(0, this.ball.radius);
+        this.ctx.stroke();
+        this.ctx.restore();
+        
+        // Draw shot arrow when powering up
         if (this.isPoweringUp) {
-            updatePowerMeter(this.power);
+            const angle = Math.atan2(this.mouseY - this.ball.y, this.mouseX - this.ball.x);
+            const arrowLength = Math.min(this.power, 100) * 0.5;
+            
+            this.ctx.save();
+            this.ctx.translate(this.ball.x, this.ball.y);
+            this.ctx.rotate(angle);
+            
+            // Draw arrow line
+            this.ctx.beginPath();
+            this.ctx.moveTo(0, 0);
+            this.ctx.lineTo(arrowLength, 0);
+            this.ctx.strokeStyle = `rgba(255, 255, 255, ${this.power / 100})`;
+            this.ctx.lineWidth = 3;
+            this.ctx.stroke();
+            
+            // Draw arrow head
+            this.ctx.beginPath();
+            this.ctx.moveTo(arrowLength, 0);
+            this.ctx.lineTo(arrowLength - 10, -5);
+            this.ctx.lineTo(arrowLength - 10, 5);
+            this.ctx.fillStyle = `rgba(255, 255, 255, ${this.power / 100})`;
+            this.ctx.fill();
+            
+            this.ctx.restore();
+        }
+        
+        // Draw game over screen
+        if (this.isGameOver) {
+            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            
+            this.ctx.fillStyle = 'white';
+            this.ctx.font = '48px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText('Game Over!', this.canvas.width/2, this.canvas.height/2 - 50);
+            
+            this.ctx.font = '24px Arial';
+            this.ctx.fillText(`Final Score: ${this.score}`, this.canvas.width/2, this.canvas.height/2 + 10);
+            this.ctx.fillText('Press Space to Play Again', this.canvas.width/2, this.canvas.height/2 + 50);
+        }
+    }
+
+    handleMouseDown(event) {
+        if (!this.ball.isShot) {
+            this.isPoweringUp = true;
+            this.power = 0;
+            this.powerInterval = setInterval(() => {
+                this.power = Math.min(this.power + 2, 100);
+                this.updateUI();
+            }, 20);
+        }
+    }
+
+    handleMouseUp(event) {
+        if (this.isPoweringUp) {
+            clearInterval(this.powerInterval);
+            this.isPoweringUp = false;
+            this.shootBall();
         }
     }
 
@@ -457,219 +544,33 @@ class Game {
         this.mouseY = event.clientY - rect.top;
     }
 
-    handleMouseDown(event) {
-        if (this.isGameOver) return;
-        this.isPoweringUp = true;
-        this.power = 0;
-    }
-
-    handleMouseUp(event) {
-        if (this.isGameOver || !this.isPoweringUp) return;
-        this.isPoweringUp = false;
-        this.shootBall();
-    }
-
     shootBall() {
-        const angle = Math.atan2(this.mouseY - this.ball.y, this.mouseX - this.ball.x);
-        const power = Math.min(this.power, 100);
-        this.ball.velocityX = Math.cos(angle) * power * 0.2;
-        this.ball.velocityY = Math.sin(angle) * power * 0.2;
-        this.ball.isShot = true;
-        AudioManager.playSound('bounce');
-    }
-
-    gameLoop() {
-        if (!this.isRunning) return;
-
-        // Clear canvas
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-
-        // Update game state
-        this.update();
-
-        // Draw game objects
-        this.draw();
-
-        // Request next frame
-        requestAnimationFrame(this.gameLoop.bind(this));
-    }
-
-    update() {
-        // Update power meter
-        if (this.isPoweringUp) {
-            this.power = Math.min(this.power + 2, 100);
-        }
-
-        // Update ball position
-        if (this.ball.isShot) {
-            this.ball.x += this.ball.velocityX;
-            this.ball.y += this.ball.velocityY;
-            this.ball.velocityY += 0.5; // Gravity
-            this.ball.rotation += this.ball.velocityX * 0.1;
-
-            // Ball trail
-            this.ball.trail.push({ x: this.ball.x, y: this.ball.y });
-            if (this.ball.trail.length > 10) {
-                this.ball.trail.shift();
+        if (!this.ball.isShot) {
+            const angle = Math.atan2(this.mouseY - this.ball.y, this.mouseX - this.ball.x);
+            const power = Math.min(this.power, 100);
+            this.ball.velocityX = Math.cos(angle) * power * 0.2;
+            this.ball.velocityY = Math.sin(angle) * power * 0.2;
+            this.ball.isShot = true;
+            
+            if (this.socket) {
+                this.socket.emit('ball_shot', {
+                    angle: angle,
+                    power: power
+                });
             }
-
-            // Check for collisions
-            this.checkCollisions();
         }
-
-        // Update basket movement
-        this.basket.y += this.basket.moveSpeed * this.basket.direction;
-        if (this.basket.y > this.canvas.height - 100 || this.basket.y < 100) {
-            this.basket.direction *= -1;
-        }
-
-        // Update net physics
-        this.updateNet();
-    }
-
-    draw() {
-        // Draw background
-        this.ctx.fillStyle = '#1a1a1a';
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-
-        // Draw ball trail
-        this.drawBallTrail();
-
-        // Draw ball
-        this.drawBall();
-
-        // Draw basket
-        this.drawBasket();
-
-        // Draw power meter
-        if (this.isPoweringUp) {
-            this.drawPowerMeter();
-        }
-
-        // Draw score
-        this.drawScore();
-    }
-
-    drawBallTrail() {
-        this.ctx.beginPath();
-        this.ball.trail.forEach((pos, i) => {
-            const alpha = i / this.ball.trail.length;
-            this.ctx.strokeStyle = `rgba(255, 107, 107, ${alpha})`;
-            this.ctx.lineWidth = 2;
-            if (i === 0) {
-                this.ctx.moveTo(pos.x, pos.y);
-            } else {
-                this.ctx.lineTo(pos.x, pos.y);
-            }
-        });
-        this.ctx.stroke();
-    }
-
-    drawBall() {
-        this.ctx.save();
-        this.ctx.translate(this.ball.x, this.ball.y);
-        this.ctx.rotate(this.ball.rotation);
-        this.ctx.beginPath();
-        this.ctx.arc(0, 0, this.ball.radius, 0, Math.PI * 2);
-        this.ctx.fillStyle = this.ball.color;
-        this.ctx.fill();
-        this.ctx.strokeStyle = '#000';
-        this.ctx.lineWidth = 2;
-        this.ctx.stroke();
-        
-        // Draw ball lines
-        this.ctx.beginPath();
-        this.ctx.moveTo(-this.ball.radius, 0);
-        this.ctx.lineTo(this.ball.radius, 0);
-        this.ctx.moveTo(0, -this.ball.radius);
-        this.ctx.lineTo(0, this.ball.radius);
-        this.ctx.strokeStyle = '#000';
-        this.ctx.lineWidth = 1;
-        this.ctx.stroke();
-        this.ctx.restore();
-    }
-
-    drawBasket() {
-        // Draw backboard
-        this.ctx.fillStyle = '#fff';
-        this.ctx.fillRect(this.basket.x + this.basket.width, 
-                         this.basket.y - 50, 
-                         10, 
-                         100);
-
-        // Draw rim
-        this.ctx.beginPath();
-        this.ctx.moveTo(this.basket.x, this.basket.y);
-        this.ctx.lineTo(this.basket.x + this.basket.width, this.basket.y);
-        this.ctx.strokeStyle = this.basket.color;
-        this.ctx.lineWidth = this.basket.rimWidth;
-        this.ctx.stroke();
-
-        // Draw net
-        this.drawNet();
-    }
-
-    drawNet() {
-        this.ctx.beginPath();
-        this.ctx.moveTo(this.basket.netPoints[0].x, this.basket.netPoints[0].y);
-        for (let i = 1; i < this.basket.netPoints.length; i++) {
-            const point = this.basket.netPoints[i];
-            this.ctx.lineTo(point.x, point.y);
-        }
-        this.ctx.strokeStyle = '#fff';
-        this.ctx.lineWidth = 1;
-        this.ctx.stroke();
-    }
-
-    updateNet() {
-        this.basket.netPoints.forEach(point => {
-            const targetY = point.baseY;
-            const dy = targetY - point.y;
-            point.velocity += dy * 0.1;
-            point.velocity *= 0.8;
-            point.y += point.velocity;
-        });
-    }
-
-    drawPowerMeter() {
-        const meterWidth = 200;
-        const meterHeight = 20;
-        const x = (this.canvas.width - meterWidth) / 2;
-        const y = this.canvas.height - 50;
-
-        // Draw background
-        this.ctx.fillStyle = '#333';
-        this.ctx.fillRect(x, y, meterWidth, meterHeight);
-
-        // Draw power level
-        this.ctx.fillStyle = `hsl(${120 * (1 - this.power / 100)}, 100%, 50%)`;
-        this.ctx.fillRect(x, y, meterWidth * (this.power / 100), meterHeight);
-
-        // Draw border
-        this.ctx.strokeStyle = '#fff';
-        this.ctx.lineWidth = 2;
-        this.ctx.strokeRect(x, y, meterWidth, meterHeight);
-    }
-
-    drawScore() {
-        this.ctx.fillStyle = '#fff';
-        this.ctx.font = '24px Arial';
-        this.ctx.textAlign = 'left';
-        this.ctx.fillText(`Score: ${this.score}`, 20, 40);
     }
 
     checkCollisions() {
-        // Check wall collisions
+        // Wall collisions
         if (this.ball.x < this.ball.radius || this.ball.x > this.canvas.width - this.ball.radius) {
             this.ball.velocityX *= -0.8;
-            AudioManager.playSound('bounce');
         }
         if (this.ball.y < this.ball.radius) {
             this.ball.velocityY *= -0.8;
-            AudioManager.playSound('bounce');
         }
-
-        // Check basket collision
+        
+        // Basket collision
         if (this.ball.y > this.basket.y - this.ball.radius && 
             this.ball.y < this.basket.y + this.ball.radius && 
             this.ball.x > this.basket.x && 
@@ -677,18 +578,27 @@ class Game {
             
             if (this.ball.velocityY > 0) {
                 this.score += 2;
-                AudioManager.playSound('score');
-                if (Math.abs(this.ball.velocityY) < 5) {
-                    // Perfect swish
-                    AudioManager.playSound('swish');
-                }
+                this.updateUI();
                 this.resetBall();
+                
+                if (this.socket) {
+                    this.socket.emit('score_update', {
+                        score: this.score,
+                        isBasket: true
+                    });
+                }
             }
         }
-
+        
         // Reset ball if it goes off screen
         if (this.ball.y > this.canvas.height + 50) {
             this.resetBall();
+            if (this.socket) {
+                this.socket.emit('score_update', {
+                    score: this.score,
+                    isBasket: false
+                });
+            }
         }
     }
 
@@ -699,26 +609,26 @@ class Game {
         this.ball.velocityY = 0;
         this.ball.isShot = false;
         this.ball.rotation = 0;
-        this.ball.trail = [];
+    }
+
+    updateUI() {
+        // Update score and time display
+        document.getElementById('score-display').textContent = `Score: ${this.score}`;
+        document.getElementById('time-display').textContent = `Time: ${Math.ceil(this.gameTime)}`;
+        
+        // Update power meter
+        const powerFill = document.getElementById('power-fill');
+        if (powerFill) {
+            powerFill.style.width = `${this.power}%`;
+        }
     }
 
     handleGameEnd() {
-        this.isGameOver = true;
-        AudioManager.playSound('gameOver');
-        AudioManager.playMusic('menu');
-    }
-
-    activatePowerup(type) {
-        const powerup = POWERUP_TYPES[type];
-        activePowerups.set(type, {
-            timeLeft: powerup.duration,
-            effect: powerup
-        });
-        
-        document.getElementById('powerupIndicator').style.display = 'block';
-        document.getElementById('powerupIndicator').textContent = `${powerup.symbol} ${powerup.duration}s`;
-        
-        AudioManager.playSound('powerup');
+        if (this.socket) {
+            this.socket.emit('game_end', {
+                score: this.score
+            });
+        }
     }
 }
 
