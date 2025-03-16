@@ -26,12 +26,55 @@ const GAME_MODES = {
 };
 
 const ACHIEVEMENTS = {
-    FIRST_BASKET: { id: 'first_basket', name: 'First Basket', description: 'Score your first basket' },
-    SHARP_SHOOTER: { id: 'sharp_shooter', name: 'Sharp Shooter', description: 'Score 5 baskets in a row' },
-    POWER_COLLECTOR: { id: 'power_collector', name: 'Power Collector', description: 'Collect all power-up types' },
-    CHAMPION: { id: 'champion', name: 'Champion', description: 'Win a tournament' },
-    TRICK_MASTER: { id: 'trick_master', name: 'Trick Master', description: 'Score a basket with 3+ bounces' }
+    FIRST_BASKET: {
+        id: 'first_basket',
+        name: 'First Basket',
+        description: 'Score your first basket',
+        icon: '🏀'
+    },
+    SHARP_SHOOTER: {
+        id: 'sharp_shooter',
+        name: 'Sharp Shooter',
+        description: 'Score 5 baskets in a row',
+        icon: '🎯'
+    },
+    POWER_COLLECTOR: {
+        id: 'power_collector',
+        name: 'Power Collector',
+        description: 'Collect all power-up types',
+        icon: '⚡'
+    },
+    CHAMPION: {
+        id: 'champion',
+        name: 'Champion',
+        description: 'Win a tournament',
+        icon: '👑'
+    },
+    TRICK_MASTER: {
+        id: 'trick_master',
+        name: 'Trick Master',
+        description: 'Score a basket with 3+ bounces',
+        icon: '🌟'
+    },
+    PERFECT_GAME: {
+        id: 'perfect_game',
+        name: 'Perfect Game',
+        description: 'Score 100 points without missing',
+        icon: '💯'
+    },
+    SPEED_DEMON: {
+        id: 'speed_demon',
+        name: 'Speed Demon',
+        description: 'Score 10 baskets in under 30 seconds',
+        icon: '⚡'
+    }
 };
+
+// Chat constants
+const CHAT_HISTORY_LENGTH = 50;
+const CHAT_COOLDOWN = 1000; // 1 second cooldown between messages
+const chatHistory = [];
+const lastMessageTime = new Map();
 
 // Game state
 const gameRooms = new Map();
@@ -43,15 +86,225 @@ const leaderboards = {
     allTime: new Map()
 };
 
+// Leaderboard system
+class LeaderboardManager {
+    constructor() {
+        this.dailyScores = new Map();
+        this.weeklyScores = new Map();
+        this.allTimeScores = new Map();
+        this.lastReset = {
+            daily: Date.now(),
+            weekly: Date.now()
+        };
+    }
+
+    addScore(playerId, score) {
+        this.checkResets();
+        
+        // Update daily scores
+        const dailyScore = this.dailyScores.get(playerId) || 0;
+        this.dailyScores.set(playerId, Math.max(dailyScore, score));
+        
+        // Update weekly scores
+        const weeklyScore = this.weeklyScores.get(playerId) || 0;
+        this.weeklyScores.set(playerId, Math.max(weeklyScore, score));
+        
+        // Update all-time scores
+        const allTimeScore = this.allTimeScores.get(playerId) || 0;
+        this.allTimeScores.set(playerId, Math.max(allTimeScore, score));
+        
+        return this.getLeaderboardData();
+    }
+
+    checkResets() {
+        const now = Date.now();
+        
+        // Check daily reset
+        if (now - this.lastReset.daily > 24 * 60 * 60 * 1000) {
+            this.dailyScores.clear();
+            this.lastReset.daily = now;
+        }
+        
+        // Check weekly reset
+        if (now - this.lastReset.weekly > 7 * 24 * 60 * 60 * 1000) {
+            this.weeklyScores.clear();
+            this.lastReset.weekly = now;
+        }
+    }
+
+    getLeaderboardData() {
+        return {
+            daily: this.getTopScores(this.dailyScores),
+            weekly: this.getTopScores(this.weeklyScores),
+            allTime: this.getTopScores(this.allTimeScores)
+        };
+    }
+
+    getTopScores(scoreMap, limit = 10) {
+        return Array.from(scoreMap.entries())
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, limit)
+            .map(([playerId, score]) => ({
+                playerId: playerId.substring(0, 4),
+                score
+            }));
+    }
+}
+
+// Initialize leaderboard
+const leaderboard = new LeaderboardManager();
+
+// Achievement tracking
+function checkAchievements(player, gameState) {
+    const newAchievements = [];
+
+    // Check FIRST_BASKET
+    if (player.score >= 2 && !player.achievements.has('FIRST_BASKET')) {
+        newAchievements.push(ACHIEVEMENTS.FIRST_BASKET);
+        player.achievements.add('FIRST_BASKET');
+    }
+
+    // Check SHARP_SHOOTER
+    if (player.consecutiveBaskets >= 5 && !player.achievements.has('SHARP_SHOOTER')) {
+        newAchievements.push(ACHIEVEMENTS.SHARP_SHOOTER);
+        player.achievements.add('SHARP_SHOOTER');
+    }
+
+    // Check POWER_COLLECTOR
+    const collectedPowerups = new Set(Array.from(player.collectedPowerups));
+    if (collectedPowerups.size === Object.keys(POWERUP_TYPES).length && !player.achievements.has('POWER_COLLECTOR')) {
+        newAchievements.push(ACHIEVEMENTS.POWER_COLLECTOR);
+        player.achievements.add('POWER_COLLECTOR');
+    }
+
+    // Check PERFECT_GAME
+    if (player.score >= 100 && player.misses === 0 && !player.achievements.has('PERFECT_GAME')) {
+        newAchievements.push(ACHIEVEMENTS.PERFECT_GAME);
+        player.achievements.add('PERFECT_GAME');
+    }
+
+    // Check SPEED_DEMON
+    if (player.quickBaskets >= 10 && !player.achievements.has('SPEED_DEMON')) {
+        newAchievements.push(ACHIEVEMENTS.SPEED_DEMON);
+        player.achievements.add('SPEED_DEMON');
+    }
+
+    return newAchievements;
+}
+
 // WebSocket connection handling
 io.on('connection', (socket) => {
     console.log('Player connected:', socket.id);
 
-    // Add player to the game
+    // Initialize player data
     players.set(socket.id, {
         id: socket.id,
         room: null,
-        score: 0
+        score: 0,
+        name: `Player ${socket.id.substr(0, 4)}`,
+        achievements: new Set(),
+        consecutiveBaskets: 0,
+        misses: 0,
+        quickBaskets: 0,
+        lastBasketTime: Date.now(),
+        collectedPowerups: new Set()
+    });
+
+    // Send initial data
+    socket.emit('init', {
+        playerId: socket.id,
+        achievements: ACHIEVEMENTS,
+        leaderboard: leaderboard.getLeaderboardData()
+    });
+
+    // Handle score updates
+    socket.on('score_update', (data) => {
+        const player = players.get(socket.id);
+        if (!player) return;
+
+        // Update player stats
+        player.score = data.score;
+        
+        if (data.isBasket) {
+            player.consecutiveBaskets++;
+            
+            // Check for quick baskets
+            const now = Date.now();
+            if (now - player.lastBasketTime < 30000) { // Within 30 seconds
+                player.quickBaskets++;
+            } else {
+                player.quickBaskets = 1;
+            }
+            player.lastBasketTime = now;
+        } else {
+            player.consecutiveBaskets = 0;
+            player.misses++;
+        }
+
+        // Check for achievements
+        const newAchievements = checkAchievements(player, gameState);
+        if (newAchievements.length > 0) {
+            socket.emit('achievements_earned', { achievements: newAchievements });
+        }
+
+        // Update leaderboard
+        const leaderboardData = leaderboard.addScore(socket.id, player.score);
+        io.emit('leaderboard_update', leaderboardData);
+    });
+
+    // Handle powerup collection
+    socket.on('powerup_collected', (data) => {
+        const player = players.get(socket.id);
+        if (!player) return;
+
+        player.collectedPowerups.add(data.powerupType);
+        
+        // Check for achievements
+        const newAchievements = checkAchievements(player, gameState);
+        if (newAchievements.length > 0) {
+            socket.emit('achievements_earned', { achievements: newAchievements });
+        }
+    });
+
+    // Send chat history to new player
+    socket.emit('chat_history', chatHistory);
+
+    // Handle chat messages
+    socket.on('chat_message', (data) => {
+        const player = players.get(socket.id);
+        if (!player) return;
+
+        // Check cooldown
+        const now = Date.now();
+        const lastTime = lastMessageTime.get(socket.id) || 0;
+        if (now - lastTime < CHAT_COOLDOWN) {
+            socket.emit('chat_error', { message: 'Please wait before sending another message' });
+            return;
+        }
+
+        // Update cooldown
+        lastMessageTime.set(socket.id, now);
+
+        // Create message object
+        const messageObj = {
+            id: uuidv4(),
+            player: player.name,
+            message: data.message.slice(0, 200), // Limit message length
+            timestamp: now
+        };
+
+        // Add to history
+        chatHistory.push(messageObj);
+        if (chatHistory.length > CHAT_HISTORY_LENGTH) {
+            chatHistory.shift();
+        }
+
+        // Broadcast to all players or room
+        if (player.room) {
+            io.to(player.room).emit('chat_message', messageObj);
+        } else {
+            io.emit('chat_message', messageObj);
+        }
     });
 
     // Handle disconnection
@@ -100,19 +353,6 @@ io.on('connection', (socket) => {
             if (room.players.size >= 2) {
                 room.state = 'playing';
                 io.to(data.roomId).emit('game_start');
-            }
-        }
-    });
-
-    socket.on('score_update', (data) => {
-        const player = players.get(socket.id);
-        if (player) {
-            player.score = data.score;
-            if (player.room) {
-                io.to(player.room).emit('scores', {
-                    playerId: socket.id,
-                    score: data.score
-                });
             }
         }
     });

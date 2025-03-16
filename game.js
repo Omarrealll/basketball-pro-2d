@@ -14,11 +14,126 @@ let gameState = {
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-// Sound effects (using base64 for portability)
-const sounds = {
-    bounce: new Audio('data:audio/wav;base64,UklGRqgAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YYQAAAAzAIAAzQD/ALUA/wCAADMAAADN/wAAtf8AAIAAMwAAAM3/AAC1/wAAgAAzAAAAzf8AALX/AACAAAAAMwDNAP8AtQD/AIAAMQAAAP3/AAC9/wAAgAAAAAAA'),
-    score: new Audio('data:audio/wav;base64,UklGRn4AAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YVAAAAB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AA=='),
-    powerup: new Audio('data:audio/wav;base64,UklGRn4AAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YVAAAAB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AA==')
+// Sound system
+const AudioManager = {
+    sounds: {
+        bounce: new Audio('https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3'),
+        score: new Audio('https://assets.mixkit.co/active_storage/sfx/1435/1435-preview.mp3'),
+        powerup: new Audio('https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3'),
+        swish: new Audio('https://assets.mixkit.co/active_storage/sfx/2643/2643-preview.mp3'),
+        achievement: new Audio('https://assets.mixkit.co/active_storage/sfx/1435/1435-preview.mp3'),
+        gameOver: new Audio('https://assets.mixkit.co/active_storage/sfx/1432/1432-preview.mp3'),
+        menuClick: new Audio('https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3')
+    },
+    music: {
+        menu: new Audio('https://assets.mixkit.co/active_storage/sfx/123/123-preview.mp3'),
+        game: new Audio('https://assets.mixkit.co/active_storage/sfx/125/125-preview.mp3'),
+        intense: new Audio('https://assets.mixkit.co/active_storage/sfx/127/127-preview.mp3')
+    },
+    currentMusic: null,
+    isMuted: false,
+    musicVolume: 0.3,
+    sfxVolume: 0.5,
+
+    init() {
+        // Set up looping for music tracks
+        Object.values(this.music).forEach(track => {
+            track.loop = true;
+            track.volume = this.musicVolume;
+        });
+
+        // Set up sound effects volume
+        Object.values(this.sounds).forEach(sound => {
+            sound.volume = this.sfxVolume;
+        });
+
+        // Add volume controls to the UI
+        this.createVolumeControls();
+    },
+
+    createVolumeControls() {
+        const controls = document.createElement('div');
+        controls.id = 'volume-controls';
+        controls.innerHTML = `
+            <div class="volume-control">
+                <label>Music: <span id="music-volume">30%</span></label>
+                <input type="range" id="music-slider" min="0" max="100" value="30">
+            </div>
+            <div class="volume-control">
+                <label>SFX: <span id="sfx-volume">50%</span></label>
+                <input type="range" id="sfx-slider" min="0" max="100" value="50">
+            </div>
+            <button id="mute-toggle">🔊</button>
+        `;
+        document.body.appendChild(controls);
+
+        // Add event listeners
+        document.getElementById('music-slider').addEventListener('input', (e) => {
+            this.setMusicVolume(e.target.value / 100);
+        });
+
+        document.getElementById('sfx-slider').addEventListener('input', (e) => {
+            this.setSFXVolume(e.target.value / 100);
+        });
+
+        document.getElementById('mute-toggle').addEventListener('click', () => {
+            this.toggleMute();
+        });
+    },
+
+    playSound(soundName) {
+        if (this.isMuted) return;
+        const sound = this.sounds[soundName];
+        if (sound) {
+            sound.currentTime = 0;
+            sound.play().catch(e => console.log('Error playing sound:', e));
+        }
+    },
+
+    playMusic(trackName) {
+        if (this.currentMusic) {
+            this.currentMusic.pause();
+            this.currentMusic.currentTime = 0;
+        }
+        
+        const track = this.music[trackName];
+        if (track && !this.isMuted) {
+            track.play().catch(e => console.log('Error playing music:', e));
+            this.currentMusic = track;
+        }
+    },
+
+    setMusicVolume(volume) {
+        this.musicVolume = volume;
+        Object.values(this.music).forEach(track => {
+            track.volume = volume;
+        });
+        document.getElementById('music-volume').textContent = `${Math.round(volume * 100)}%`;
+    },
+
+    setSFXVolume(volume) {
+        this.sfxVolume = volume;
+        Object.values(this.sounds).forEach(sound => {
+            sound.volume = volume;
+        });
+        document.getElementById('sfx-volume').textContent = `${Math.round(volume * 100)}%`;
+    },
+
+    toggleMute() {
+        this.isMuted = !this.isMuted;
+        const button = document.getElementById('mute-toggle');
+        button.textContent = this.isMuted ? '🔇' : '🔊';
+
+        if (this.isMuted) {
+            if (this.currentMusic) {
+                this.currentMusic.pause();
+            }
+        } else {
+            if (this.currentMusic) {
+                this.currentMusic.play().catch(e => console.log('Error resuming music:', e));
+            }
+        }
+    }
 };
 
 // Power-up types
@@ -224,6 +339,10 @@ class Game {
         this.gameMode = 'classic';
         this.isRunning = false;
         
+        // Set canvas size
+        this.canvas.width = 800;
+        this.canvas.height = 600;
+        
         // Initialize sounds
         this.sounds = {
             bounce: new Audio('data:audio/wav;base64,UklGRqgAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YYQAAAAzAIAAzQD/ALUA/wCAADMAAADN/wAAtf8AAIAAMwAAAM3/AAC1/wAAgAAzAAAAzf8AALX/AACAAAAAMwDNAP8AtQD/AIAAMQAAAP3/AAC9/wAAgAAAAAAA'),
@@ -231,15 +350,42 @@ class Game {
             powerup: new Audio('data:audio/wav;base64,UklGRn4AAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YVAAAAB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AH8AfwB/AA==')
         };
 
-        // Initialize power-up types
-        this.POWERUP_TYPES = {
-            DOUBLE_POINTS: { color: '#ffd700', duration: 10, symbol: '2×' },
-            BIGGER_BALL: { color: '#4CAF50', duration: 15, symbol: '⚪' },
-            SLOWER_BASKET: { color: '#2196F3', duration: 8, symbol: '⏱' },
-            PERFECT_SHOT: { color: '#9C27B0', duration: 5, symbol: '🎯' }
-        };
+        // Initialize game objects
+        this.resetGame();
 
-        // Game objects
+        // Bind event listeners
+        this.canvas.addEventListener('mousemove', this.handleMouseMove.bind(this));
+        this.canvas.addEventListener('mousedown', this.handleMouseDown.bind(this));
+        this.canvas.addEventListener('mouseup', this.handleMouseUp.bind(this));
+
+        // Socket event handlers
+        if (this.socket) {
+            this.socket.on('game_update', this.handleGameUpdate.bind(this));
+            this.socket.on('player_joined', this.handlePlayerJoined.bind(this));
+            this.socket.on('player_left', this.handlePlayerLeft.bind(this));
+            this.socket.on('powerup_spawned', this.handlePowerupSpawned.bind(this));
+            this.socket.on('game_end', this.handleGameEnd.bind(this));
+        }
+
+        // Initialize audio
+        AudioManager.init();
+        
+        // Start menu music
+        AudioManager.playMusic('menu');
+    }
+
+    resetGame() {
+        // Game state
+        this.score = 0;
+        this.gameTime = 60;
+        this.isGameOver = false;
+        this.isPoweringUp = false;
+        this.power = 0;
+        this.mouseX = 0;
+        this.mouseY = 0;
+        this.activePowerups = new Map();
+
+        // Reset ball
         this.ball = {
             x: 100,
             y: 500,
@@ -252,6 +398,7 @@ class Game {
             trail: []
         };
 
+        // Reset basket
         this.basket = {
             x: 700,
             y: 300,
@@ -265,6 +412,7 @@ class Game {
         };
 
         // Initialize net points
+        this.basket.netPoints = [];
         for (let i = 0; i < 10; i++) {
             this.basket.netPoints.push({
                 x: this.basket.x + i * (this.basket.width / 9),
@@ -274,35 +422,33 @@ class Game {
             });
         }
 
-        // Game state
-        this.score = 0;
-        this.gameTime = 60;
-        this.isGameOver = false;
-        this.isPoweringUp = false;
-        this.power = 0;
-        this.mouseX = 0;
-        this.mouseY = 0;
-        this.activePowerups = new Map();
-        this.lastEmoteTime = 0;
-
-        // Bind event listeners
-        this.canvas.addEventListener('mousemove', this.handleMouseMove.bind(this));
-        this.canvas.addEventListener('mousedown', this.handleMouseDown.bind(this));
-        this.canvas.addEventListener('mouseup', this.handleMouseUp.bind(this));
-
-        // Set canvas size
-        this.canvas.width = 800;
-        this.canvas.height = 600;
+        // Update UI
+        this.updateUI();
     }
 
     start() {
         if (this.isRunning) return;
         this.isRunning = true;
+        this.resetGame();
+        
+        // Switch to game music
+        AudioManager.playMusic('game');
+        
         this.gameLoop();
     }
 
     stop() {
         this.isRunning = false;
+    }
+
+    updateUI() {
+        // Update score and time display
+        updateGameUI(this.score, this.gameTime);
+
+        // Update power meter if powering up
+        if (this.isPoweringUp) {
+            updatePowerMeter(this.power);
+        }
     }
 
     handleMouseMove(event) {
@@ -329,7 +475,7 @@ class Game {
         this.ball.velocityX = Math.cos(angle) * power * 0.2;
         this.ball.velocityY = Math.sin(angle) * power * 0.2;
         this.ball.isShot = true;
-        this.sounds.bounce.play();
+        AudioManager.playSound('bounce');
     }
 
     gameLoop() {
@@ -516,11 +662,11 @@ class Game {
         // Check wall collisions
         if (this.ball.x < this.ball.radius || this.ball.x > this.canvas.width - this.ball.radius) {
             this.ball.velocityX *= -0.8;
-            this.sounds.bounce.play();
+            AudioManager.playSound('bounce');
         }
         if (this.ball.y < this.ball.radius) {
             this.ball.velocityY *= -0.8;
-            this.sounds.bounce.play();
+            AudioManager.playSound('bounce');
         }
 
         // Check basket collision
@@ -531,7 +677,11 @@ class Game {
             
             if (this.ball.velocityY > 0) {
                 this.score += 2;
-                this.sounds.score.play();
+                AudioManager.playSound('score');
+                if (Math.abs(this.ball.velocityY) < 5) {
+                    // Perfect swish
+                    AudioManager.playSound('swish');
+                }
                 this.resetBall();
             }
         }
@@ -550,6 +700,25 @@ class Game {
         this.ball.isShot = false;
         this.ball.rotation = 0;
         this.ball.trail = [];
+    }
+
+    handleGameEnd() {
+        this.isGameOver = true;
+        AudioManager.playSound('gameOver');
+        AudioManager.playMusic('menu');
+    }
+
+    activatePowerup(type) {
+        const powerup = POWERUP_TYPES[type];
+        activePowerups.set(type, {
+            timeLeft: powerup.duration,
+            effect: powerup
+        });
+        
+        document.getElementById('powerupIndicator').style.display = 'block';
+        document.getElementById('powerupIndicator').textContent = `${powerup.symbol} ${powerup.duration}s`;
+        
+        AudioManager.playSound('powerup');
     }
 }
 
@@ -632,6 +801,39 @@ style.textContent = `
 
     button:hover {
         background: #45a049;
+    }
+
+    #volume-controls {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: rgba(0, 0, 0, 0.8);
+        padding: 15px;
+        border-radius: 10px;
+        z-index: 1000;
+    }
+
+    .volume-control {
+        margin: 10px 0;
+        color: white;
+    }
+
+    .volume-control input[type="range"] {
+        width: 100px;
+        margin-left: 10px;
+    }
+
+    #mute-toggle {
+        background: none;
+        border: none;
+        color: white;
+        font-size: 24px;
+        cursor: pointer;
+        padding: 5px;
+    }
+
+    #mute-toggle:hover {
+        opacity: 0.8;
     }
 `;
 
@@ -764,7 +966,7 @@ function activatePowerup(type) {
     document.getElementById('powerupIndicator').style.display = 'block';
     document.getElementById('powerupIndicator').textContent = `${powerup.symbol} ${powerup.duration}s`;
     
-    playSound('powerup');
+    AudioManager.playSound('powerup');
 }
 
 function updatePowerups() {
@@ -1085,6 +1287,16 @@ function updateBasket() {
         point.baseY = basket.y + basket.height;
     });
 }
+
+// Initialize menu handlers
+document.addEventListener('DOMContentLoaded', () => {
+    // Add click sound to menu buttons
+    document.querySelectorAll('button').forEach(button => {
+        button.addEventListener('click', () => {
+            AudioManager.playSound('menuClick');
+        });
+    });
+});
 
 // Start with main menu
 showMainMenu();
