@@ -4,11 +4,22 @@
   "description": "Multiplayer Basketball Game",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "nodemon server.js"
   },
   "dependencies": {
     "express": "^4.17.1",
     "ws": "^8.2.3",
-    "uuid": "^8.3.2"
+    "uuid": "^8.3.2",
+    "socket.io": "^4.7.2",
+    "cors": "^2.8.5",
+    "compression": "^1.7.4",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=14.0.0"
   }
 } 

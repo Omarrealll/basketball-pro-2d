@@ -3,224 +3,357 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Basketball Pro 2D - Multiplayer</title>
+    <title>2D Basketball Pro</title>
     <style>
-        * {
+        body {
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
+            background: #111;
+            color: white;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
         }
-        body {
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
             display: flex;
             flex-direction: column;
-            justify-content: center;
             align-items: center;
-            min-height: 100vh;
-            background: linear-gradient(135deg, #1a1a2e, #16213e);
-            font-family: Arial, sans-serif;
-            color: white;
+            justify-content: center;
         }
-        #gameContainer {
-            position: relative;
-            margin: 20px;
-        }
-        canvas {
-            border: 3px solid #e94560;
-            border-radius: 10px;
-            box-shadow: 0 0 20px rgba(233, 69, 96, 0.3);
-            background: linear-gradient(180deg, #0f3460 0%, #162447 100%);
-        }
-        #ui {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            color: #fff;
-            font-size: 20px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-        }
-        .menu {
+
+        #menu {
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            background: rgba(0,0,0,0.9);
-            padding: 30px;
-            border-radius: 15px;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 40px;
+            border-radius: 20px;
             text-align: center;
-            min-width: 300px;
+            z-index: 100;
         }
-        button {
-            background: #e94560;
-            border: none;
-            padding: 12px 24px;
-            color: white;
-            border-radius: 5px;
+
+        #menu.hidden {
+            display: none;
+        }
+
+        .menu-section {
+            margin: 20px 0;
+        }
+
+        .game-mode {
+            display: inline-block;
+            width: 200px;
+            margin: 10px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
             cursor: pointer;
-            margin: 10px;
-            font-size: 16px;
-            transition: all 0.3s ease;
-            width: 200px;
+            transition: transform 0.2s, background 0.2s;
         }
-        button:hover {
-            transform: scale(1.1);
-            background: #ff6b6b;
+
+        .game-mode:hover {
+            transform: scale(1.05);
+            background: rgba(255, 255, 255, 0.2);
         }
-        input {
-            padding: 10px;
-            margin: 10px;
-            border-radius: 5px;
-            border: none;
-            width: 200px;
-            font-size: 16px;
+
+        .game-mode.selected {
+            background: #4CAF50;
         }
-        #tutorial {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            color: #fff;
-            text-align: center;
-            font-size: 16px;
-            background: rgba(0,0,0,0.6);
-            padding: 10px;
-            border-radius: 5px;
-            pointer-events: none;
+
+        .game-mode h3 {
+            margin: 0 0 10px 0;
         }
+
+        .game-mode p {
+            font-size: 14px;
+            margin: 0;
+            opacity: 0.8;
+        }
+
+        #tournament-section {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
         #leaderboard {
-            position: fixed;
+            position: absolute;
             top: 20px;
             right: 20px;
-            background: rgba(0,0,0,0.8);
+            background: rgba(0, 0, 0, 0.8);
             padding: 20px;
             border-radius: 10px;
             min-width: 200px;
         }
-        #leaderboard h3 {
-            margin-bottom: 10px;
-            color: #e94560;
-        }
-        .leaderboard-entry {
-            display: flex;
-            justify-content: space-between;
-            margin: 5px 0;
-            padding: 5px;
-            background: rgba(255,255,255,0.1);
-            border-radius: 3px;
-        }
-        #chat {
-            position: fixed;
-            left: 20px;
+
+        #achievements {
+            position: absolute;
             bottom: 20px;
-            background: rgba(0,0,0,0.8);
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
             padding: 20px;
             border-radius: 10px;
-            width: 300px;
         }
-        #chatMessages {
-            height: 200px;
-            overflow-y: auto;
-            margin-bottom: 10px;
-            padding: 10px;
-            background: rgba(255,255,255,0.1);
-        }
-        #chatInput {
-            width: 100%;
-            padding: 8px;
-            border-radius: 5px;
-            border: none;
-            background: rgba(255,255,255,0.2);
-            color: white;
-        }
-        .powerup {
-            position: absolute;
-            width: 30px;
-            height: 30px;
-            border-radius: 50%;
-            animation: pulse 1s infinite;
-        }
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.2); }
-            100% { transform: scale(1); }
-        }
-        #mainMenu, #roomMenu, #gameOver {
-            display: none;
-        }
-        .player-info {
+
+        .achievement {
             display: flex;
             align-items: center;
-            margin: 5px 0;
+            margin: 10px 0;
+            opacity: 0.5;
         }
-        .player-color {
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
+
+        .achievement.unlocked {
+            opacity: 1;
+        }
+
+        .achievement-icon {
+            width: 30px;
+            height: 30px;
             margin-right: 10px;
+            background: #4CAF50;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
-        #powerupIndicator {
+
+        #game-canvas {
+            border: 2px solid #333;
+        }
+
+        #emote-wheel {
             position: absolute;
-            top: 10px;
-            right: 10px;
-            padding: 10px;
-            background: rgba(0,0,0,0.7);
-            border-radius: 5px;
             display: none;
+            width: 200px;
+            height: 200px;
+            background: rgba(0, 0, 0, 0.9);
+            border-radius: 50%;
+            z-index: 1000;
         }
-        .emoji-reaction {
+
+        .emote-button {
             position: absolute;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
             font-size: 24px;
-            pointer-events: none;
-            animation: floatUp 1s forwards;
+            transition: transform 0.2s, background 0.2s;
         }
-        @keyframes floatUp {
-            from { transform: translateY(0); opacity: 1; }
-            to { transform: translateY(-50px); opacity: 0; }
+
+        .emote-button:hover {
+            transform: scale(1.1);
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        #power-up-indicator {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .power-up-slot {
+            width: 50px;
+            height: 50px;
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+
+        #streak-counter {
+            position: absolute;
+            top: 20px;
+            right: 250px;
+            font-size: 48px;
+            font-weight: bold;
+            color: #4CAF50;
+            text-shadow: 0 0 10px rgba(76, 175, 80, 0.5);
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+        }
+
+        .streak-animation {
+            animation: bounce 0.5s ease-in-out;
         }
     </style>
 </head>
 <body>
-    <div id="gameContainer">
-        <canvas id="gameCanvas" width="800" height="600"></canvas>
-        <div id="ui">
-            <div>Score: <span id="score">0</span></div>
-            <div>Time: <span id="time">60</span>s</div>
-            <div>Room: <span id="roomCode">-</span></div>
+    <div id="game-container">
+        <div id="menu">
+            <h1>2D Basketball Pro</h1>
+            <div class="menu-section">
+                <h2>Select Game Mode</h2>
+                <div class="game-mode" data-mode="classic">
+                    <h3>Classic</h3>
+                    <p>Traditional basketball gameplay with power-ups</p>
+                </div>
+                <div class="game-mode" data-mode="battle_royale">
+                    <h3>Battle Royale</h3>
+                    <p>Last player standing wins! Court shrinks over time</p>
+                </div>
+                <div class="game-mode" data-mode="time_attack">
+                    <h3>Time Attack</h3>
+                    <p>Score as many points as possible before time runs out</p>
+                </div>
+                <div class="game-mode" data-mode="trick_shot">
+                    <h3>Trick Shot</h3>
+                    <p>Earn bonus points for creative shots and bounces</p>
+                </div>
+            </div>
+            <div id="tournament-section">
+                <h2>Tournaments</h2>
+                <button id="create-tournament">Create Tournament</button>
+                <button id="join-tournament">Join Tournament</button>
+                <div id="tournament-code-input" style="display: none;">
+                    <input type="text" placeholder="Enter tournament code">
+                    <button>Join</button>
+                </div>
+            </div>
+            <button id="start-game">Start Game</button>
         </div>
-        <div id="powerupIndicator"></div>
-        <div id="mainMenu" class="menu">
-            <h2>Basketball Pro 2D</h2>
-            <button onclick="createRoom()">Create Room</button>
-            <br>
-            <input type="text" id="roomInput" placeholder="Enter Room Code">
-            <button onclick="joinRoom()">Join Room</button>
+
+        <canvas id="game-canvas"></canvas>
+
+        <div id="leaderboard">
+            <h2>Leaderboard</h2>
+            <div class="leaderboard-tabs">
+                <button class="tab active" data-period="daily">Daily</button>
+                <button class="tab" data-period="weekly">Weekly</button>
+                <button class="tab" data-period="all-time">All Time</button>
+            </div>
+            <div id="leaderboard-content"></div>
         </div>
-        <div id="roomMenu" class="menu">
-            <h2>Room: <span id="roomDisplay"></span></h2>
-            <div id="playerList"></div>
-            <button onclick="startGame()" id="startButton">Start Game</button>
-            <button onclick="leaveRoom()">Leave Room</button>
+
+        <div id="achievements">
+            <h2>Achievements</h2>
+            <div id="achievements-list"></div>
         </div>
-        <div id="gameOver" class="menu">
-            <h2>Game Over!</h2>
-            <p>Final Score: <span id="finalScore">0</span></p>
-            <p>Global Rank: <span id="finalRank">-</span></p>
-            <button onclick="playAgain()">Play Again</button>
-            <button onclick="returnToMenu()">Main Menu</button>
-        </div>
-        <div id="tutorial">
-            Click and hold to aim - Release to shoot - Move mouse to adjust angle
-            <br>
-            Press 'E' for emotes - Collect power-ups for special abilities!
-        </div>
+
+        <div id="emote-wheel"></div>
+
+        <div id="power-up-indicator"></div>
+
+        <div id="streak-counter"></div>
     </div>
-    <div id="leaderboard">
-        <h3>Global Leaderboard</h3>
-        <div id="leaderboardEntries"></div>
-    </div>
-    <div id="chat">
-        <div id="chatMessages"></div>
-        <input type="text" id="chatInput" placeholder="Type message...">
-    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
     <script src="game.js"></script>
+    <script>
+        // Initialize game modes
+        const gameModes = document.querySelectorAll('.game-mode');
+        let selectedMode = 'classic';
+
+        gameModes.forEach(mode => {
+            mode.addEventListener('click', () => {
+                gameModes.forEach(m => m.classList.remove('selected'));
+                mode.classList.add('selected');
+                selectedMode = mode.dataset.mode;
+            });
+        });
+
+        // Tournament handling
+        document.getElementById('create-tournament').addEventListener('click', () => {
+            socket.send(JSON.stringify({
+                type: 'create_tournament',
+                name: `Tournament ${Math.random().toString(36).substring(7)}`
+            }));
+        });
+
+        document.getElementById('join-tournament').addEventListener('click', () => {
+            const input = document.getElementById('tournament-code-input');
+            input.style.display = input.style.display === 'none' ? 'block' : 'none';
+        });
+
+        // Start game
+        document.getElementById('start-game').addEventListener('click', () => {
+            document.getElementById('menu').classList.add('hidden');
+            initGame(selectedMode);
+        });
+
+        // Initialize achievements
+        function initAchievements() {
+            const achievements = [
+                { id: 'first_basket', name: 'First Basket', description: 'Score your first basket', icon: '🏀' },
+                { id: 'sharp_shooter', name: 'Sharp Shooter', description: 'Score 5 baskets in a row', icon: '🎯' },
+                { id: 'power_collector', name: 'Power Collector', description: 'Collect all power-up types', icon: '⚡' },
+                { id: 'champion', name: 'Champion', description: 'Win a tournament', icon: '👑' },
+                { id: 'trick_master', name: 'Trick Master', description: 'Score a basket with 3+ bounces', icon: '🌟' }
+            ];
+
+            const container = document.getElementById('achievements-list');
+            achievements.forEach(achievement => {
+                const div = document.createElement('div');
+                div.className = 'achievement';
+                div.dataset.id = achievement.id;
+                div.innerHTML = `
+                    <div class="achievement-icon">${achievement.icon}</div>
+                    <div class="achievement-info">
+                        <h3>${achievement.name}</h3>
+                        <p>${achievement.description}</p>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // Initialize emote wheel
+        function initEmoteWheel() {
+            const wheel = document.getElementById('emote-wheel');
+            const emotes = ['👍', '😄', '🎯', '🔥', '👏', '🏀'];
+            
+            emotes.forEach((emote, i) => {
+                const button = document.createElement('div');
+                button.className = 'emote-button';
+                button.textContent = emote;
+                
+                const angle = (i / emotes.length) * Math.PI * 2 - Math.PI / 2;
+                const radius = 70;
+                
+                button.style.left = `${100 + Math.cos(angle) * radius}px`;
+                button.style.top = `${100 + Math.sin(angle) * radius}px`;
+                
+                button.addEventListener('click', () => {
+                    socket.send(JSON.stringify({
+                        type: 'emote',
+                        emote: emote
+                    }));
+                    wheel.style.display = 'none';
+                });
+                
+                wheel.appendChild(button);
+            });
+        }
+
+        // Initialize everything when the page loads
+        window.addEventListener('load', () => {
+            initAchievements();
+            initEmoteWheel();
+        });
+
+        // Show/hide emote wheel on right click
+        document.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            const wheel = document.getElementById('emote-wheel');
+            wheel.style.display = wheel.style.display === 'none' ? 'block' : 'none';
+            wheel.style.left = `${e.clientX - 100}px`;
+            wheel.style.top = `${e.clientY - 100}px`;
+        });
+    </script>
 </body>
 </html> 

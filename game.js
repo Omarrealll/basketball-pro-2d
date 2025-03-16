@@ -78,6 +78,549 @@ let activePowerups = new Map();
 const EMOTES = ['👍', '😄', '🎯', '🔥', '👏', '🏀'];
 let lastEmoteTime = 0;
 
+// Game modes and settings
+const GAME_MODES = {
+    CLASSIC: 'classic',
+    BATTLE_ROYALE: 'battle_royale',
+    TIME_ATTACK: 'time_attack',
+    TRICK_SHOT: 'trick_shot',
+    TOURNAMENT: 'tournament'
+};
+
+// Power-up effects
+const POWER_UP_EFFECTS = {
+    DOUBLE_POINTS: {
+        apply: (player) => {
+            player.pointsMultiplier = 2;
+        },
+        remove: (player) => {
+            player.pointsMultiplier = 1;
+        }
+    },
+    BIGGER_BALL: {
+        apply: (player) => {
+            player.ballSize *= 1.5;
+        },
+        remove: (player) => {
+            player.ballSize /= 1.5;
+        }
+    },
+    SLOWER_BASKET: {
+        apply: (player) => {
+            player.basketSpeed *= 0.5;
+        },
+        remove: (player) => {
+            player.basketSpeed *= 2;
+        }
+    },
+    PERFECT_SHOT: {
+        apply: (player) => {
+            player.perfectShot = true;
+        },
+        remove: (player) => {
+            player.perfectShot = false;
+        }
+    },
+    MULTI_BALL: {
+        apply: (player) => {
+            player.multipleBalls = true;
+        },
+        remove: (player) => {
+            player.multipleBalls = false;
+        }
+    },
+    GRAVITY_FLIP: {
+        apply: (player) => {
+            player.gravityMultiplier *= -1;
+        },
+        remove: (player) => {
+            player.gravityMultiplier *= -1;
+        }
+    },
+    SPEED_BOOST: {
+        apply: (player) => {
+            player.moveSpeed *= 1.5;
+        },
+        remove: (player) => {
+            player.moveSpeed /= 1.5;
+        }
+    }
+};
+
+// Player class enhancement
+class Player {
+    constructor(x, y, color) {
+        this.x = x;
+        this.y = y;
+        this.color = color;
+        this.score = 0;
+        this.streak = 0;
+        this.activePowerUps = new Map();
+        this.achievements = new Set();
+        this.ballSize = 15;
+        this.basketSpeed = 1;
+        this.moveSpeed = 5;
+        this.gravityMultiplier = 1;
+        this.pointsMultiplier = 1;
+        this.perfectShot = false;
+        this.multipleBalls = false;
+    }
+
+    update() {
+        // Update power-up durations and remove expired ones
+        for (const [powerUpId, powerUp] of this.activePowerUps.entries()) {
+            if (Date.now() >= powerUp.expiryTime) {
+                this.removePowerUp(powerUpId);
+            }
+        }
+    }
+
+    addPowerUp(powerUp) {
+        const effect = POWER_UP_EFFECTS[powerUp.type];
+        if (effect) {
+            effect.apply(this);
+            this.activePowerUps.set(powerUp.id, {
+                type: powerUp.type,
+                expiryTime: Date.now() + powerUp.duration * 1000
+            });
+
+            // Show power-up effect animation
+            this.showPowerUpEffect(powerUp);
+        }
+    }
+
+    removePowerUp(powerUpId) {
+        const powerUp = this.activePowerUps.get(powerUpId);
+        if (powerUp) {
+            const effect = POWER_UP_EFFECTS[powerUp.type];
+            if (effect) {
+                effect.remove(this);
+            }
+            this.activePowerUps.delete(powerUpId);
+        }
+    }
+
+    showPowerUpEffect(powerUp) {
+        const effect = document.createElement('div');
+        effect.className = 'power-up-effect';
+        effect.style.backgroundColor = powerUp.color;
+        effect.style.left = `${this.x}px`;
+        effect.style.top = `${this.y}px`;
+        document.body.appendChild(effect);
+
+        // Animate and remove the effect
+        setTimeout(() => {
+            effect.remove();
+        }, 1000);
+    }
+}
+
+// Game class enhancement
+class Game {
+    constructor(canvas, socket) {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext('2d');
+        this.socket = socket;
+        this.players = new Map();
+        this.balls = new Map();
+        this.powerUps = [];
+        this.obstacles = [];
+        this.gameMode = GAME_MODES.CLASSIC;
+        this.timeRemaining = 180;
+        this.tournament = null;
+        
+        this.setupEventListeners();
+        this.setupGameLoop();
+    }
+
+    setupEventListeners() {
+        // ... existing event listeners ...
+
+        this.socket.addEventListener('message', (event) => {
+            const data = JSON.parse(event.data);
+            switch (data.type) {
+                case 'power_up_spawned':
+                    this.handlePowerUpSpawn(data.powerUp);
+                    break;
+                case 'achievement_unlocked':
+                    this.handleAchievementUnlock(data.achievement);
+                    break;
+                case 'tournament_match_ready':
+                    this.handleTournamentMatch(data);
+                    break;
+                // ... existing cases ...
+            }
+        });
+    }
+
+    handlePowerUpSpawn(powerUp) {
+        this.powerUps.push(powerUp);
+        this.showPowerUpSpawnAnimation(powerUp);
+    }
+
+    handleAchievementUnlock(achievement) {
+        this.showAchievementNotification(achievement);
+        this.updateAchievementsDisplay();
+    }
+
+    handleTournamentMatch(data) {
+        this.showTournamentMatchNotification(data);
+        // Automatically join the match room
+        this.socket.send(JSON.stringify({
+            type: 'join_room',
+            roomId: data.roomId,
+            gameMode: GAME_MODES.TOURNAMENT
+        }));
+    }
+
+    showAchievementNotification(achievement) {
+        const notification = document.createElement('div');
+        notification.className = 'achievement-notification';
+        notification.innerHTML = `
+            <h3>Achievement Unlocked!</h3>
+            <p>${achievement.name}</p>
+            <p>${achievement.description}</p>
+        `;
+        document.body.appendChild(notification);
+
+        // Animate and remove the notification
+        setTimeout(() => {
+            notification.classList.add('fade-out');
+            setTimeout(() => notification.remove(), 1000);
+        }, 3000);
+    }
+
+    showPowerUpSpawnAnimation(powerUp) {
+        const animation = document.createElement('div');
+        animation.className = 'power-up-spawn';
+        animation.style.backgroundColor = powerUp.color;
+        animation.style.left = `${powerUp.x}px`;
+        animation.style.top = `${powerUp.y}px`;
+        document.body.appendChild(animation);
+
+        // Remove the animation element after it's done
+        setTimeout(() => animation.remove(), 1000);
+    }
+
+    showTournamentMatchNotification(data) {
+        const notification = document.createElement('div');
+        notification.className = 'tournament-notification';
+        notification.innerHTML = `
+            <h3>Tournament Match Ready!</h3>
+            <p>Your opponent is waiting</p>
+            <button onclick="this.parentElement.remove()">Let's Go!</button>
+        `;
+        document.body.appendChild(notification);
+    }
+
+    update() {
+        // Update game state
+        this.updatePlayers();
+        this.updateBalls();
+        this.updatePowerUps();
+        this.updateObstacles();
+        this.updateTime();
+
+        // Check for collisions
+        this.checkCollisions();
+
+        // Update UI
+        this.updateUI();
+    }
+
+    updatePlayers() {
+        for (const player of this.players.values()) {
+            player.update();
+        }
+    }
+
+    updatePowerUps() {
+        // Check for power-up collisions
+        for (const powerUp of this.powerUps) {
+            const player = this.players.get(this.socket.playerId);
+            if (player && this.checkPowerUpCollision(player, powerUp)) {
+                this.collectPowerUp(player, powerUp);
+            }
+        }
+    }
+
+    updateObstacles() {
+        for (const obstacle of this.obstacles) {
+            if (obstacle.type === 'platform' && obstacle.movementRange) {
+                // Update moving platform position
+                obstacle.x += obstacle.speed;
+                if (obstacle.x > obstacle.startX + obstacle.movementRange || 
+                    obstacle.x < obstacle.startX) {
+                    obstacle.speed *= -1;
+                }
+            }
+        }
+    }
+
+    updateTime() {
+        if (this.timeRemaining > 0) {
+            this.timeRemaining -= 1/60;
+            if (this.timeRemaining <= 0) {
+                this.handleGameEnd();
+            }
+        }
+    }
+
+    checkPowerUpCollision(player, powerUp) {
+        const dx = player.x - powerUp.x;
+        const dy = player.y - powerUp.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        return distance < 30; // Collision radius
+    }
+
+    collectPowerUp(player, powerUp) {
+        // Remove power-up from the game
+        this.powerUps = this.powerUps.filter(p => p.id !== powerUp.id);
+
+        // Apply power-up effect to player
+        player.addPowerUp(powerUp);
+
+        // Notify server
+        this.socket.send(JSON.stringify({
+            type: 'power_up_used',
+            powerUpId: powerUp.id
+        }));
+    }
+
+    handleGameEnd() {
+        // Show game end screen with stats
+        const gameEndScreen = document.createElement('div');
+        gameEndScreen.className = 'game-end-screen';
+        gameEndScreen.innerHTML = `
+            <h2>Game Over!</h2>
+            <div class="stats">
+                <p>Final Score: ${this.players.get(this.socket.playerId).score}</p>
+                <p>Highest Streak: ${this.players.get(this.socket.playerId).highestStreak}</p>
+                <p>Power-ups Collected: ${this.players.get(this.socket.playerId).activePowerUps.size}</p>
+            </div>
+            <button onclick="location.reload()">Play Again</button>
+        `;
+        document.body.appendChild(gameEndScreen);
+    }
+
+    render() {
+        // Clear canvas
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Draw background based on game mode
+        this.drawBackground();
+
+        // Draw obstacles
+        this.drawObstacles();
+
+        // Draw power-ups
+        this.drawPowerUps();
+
+        // Draw players
+        this.drawPlayers();
+
+        // Draw balls
+        this.drawBalls();
+
+        // Draw UI
+        this.drawUI();
+    }
+
+    drawBackground() {
+        switch (this.gameMode) {
+            case GAME_MODES.BATTLE_ROYALE:
+                this.drawBattleRoyaleBackground();
+                break;
+            case GAME_MODES.TRICK_SHOT:
+                this.drawTrickShotBackground();
+                break;
+            default:
+                this.drawClassicBackground();
+        }
+    }
+
+    drawBattleRoyaleBackground() {
+        // Draw shrinking court
+        const progress = this.timeRemaining / 300; // 5 minutes total
+        const courtSize = Math.max(200, this.canvas.width * progress);
+        const courtX = (this.canvas.width - courtSize) / 2;
+        
+        this.ctx.fillStyle = '#333';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        this.ctx.fillStyle = '#666';
+        this.ctx.fillRect(courtX, 0, courtSize, this.canvas.height);
+    }
+
+    drawTrickShotBackground() {
+        // Draw special trick shot elements
+        this.ctx.fillStyle = '#1a1a1a';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        // Draw bounce guides
+        this.ctx.strokeStyle = '#444';
+        this.ctx.setLineDash([5, 5]);
+        this.ctx.beginPath();
+        for (let i = 0; i < this.canvas.width; i += 100) {
+            this.ctx.moveTo(i, 0);
+            this.ctx.lineTo(i, this.canvas.height);
+        }
+        this.ctx.stroke();
+        this.ctx.setLineDash([]);
+    }
+
+    drawClassicBackground() {
+        this.ctx.fillStyle = '#222';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    }
+
+    drawObstacles() {
+        for (const obstacle of this.obstacles) {
+            this.ctx.fillStyle = obstacle.type === 'wall' ? '#666' : '#444';
+            this.ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+            
+            if (obstacle.type === 'barrier' && obstacle.health) {
+                // Draw health bar
+                this.ctx.fillStyle = '#f00';
+                const healthHeight = (obstacle.health / 3) * obstacle.height;
+                this.ctx.fillRect(obstacle.x, obstacle.y + obstacle.height - healthHeight, 
+                    obstacle.width, healthHeight);
+            }
+        }
+    }
+
+    drawPowerUps() {
+        for (const powerUp of this.powerUps) {
+            this.ctx.fillStyle = powerUp.color;
+            this.ctx.beginPath();
+            this.ctx.arc(powerUp.x, powerUp.y, 15, 0, Math.PI * 2);
+            this.ctx.fill();
+
+            // Draw power-up icon or symbol
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = '12px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText(powerUp.type[0], powerUp.x, powerUp.y + 4);
+        }
+    }
+
+    drawUI() {
+        // Draw time remaining
+        this.ctx.fillStyle = '#fff';
+        this.ctx.font = '24px Arial';
+        this.ctx.textAlign = 'center';
+        const minutes = Math.floor(this.timeRemaining / 60);
+        const seconds = Math.floor(this.timeRemaining % 60);
+        this.ctx.fillText(`${minutes}:${seconds.toString().padStart(2, '0')}`, 
+            this.canvas.width / 2, 30);
+
+        // Draw active power-ups
+        const player = this.players.get(this.socket.playerId);
+        if (player) {
+            let i = 0;
+            for (const [powerUpId, powerUp] of player.activePowerUps) {
+                const timeLeft = Math.ceil((powerUp.expiryTime - Date.now()) / 1000);
+                this.ctx.fillStyle = POWER_UP_EFFECTS[powerUp.type].color;
+                this.ctx.fillRect(10 + i * 60, 10, 50, 50);
+                this.ctx.fillStyle = '#fff';
+                this.ctx.fillText(timeLeft, 35 + i * 60, 40);
+                i++;
+            }
+        }
+
+        // Draw streak counter
+        if (player && player.streak > 0) {
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = '36px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText(`${player.streak}x`, this.canvas.width - 50, 50);
+        }
+    }
+}
+
+// Add CSS styles for new UI elements
+const style = document.createElement('style');
+style.textContent = `
+    .power-up-effect {
+        position: absolute;
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        animation: pulse 1s ease-out;
+        pointer-events: none;
+    }
+
+    .achievement-notification {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 20px;
+        border-radius: 10px;
+        animation: slideIn 0.5s ease-out;
+    }
+
+    .tournament-notification {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(0, 0, 0, 0.9);
+        color: white;
+        padding: 30px;
+        border-radius: 15px;
+        text-align: center;
+    }
+
+    .game-end-screen {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(0, 0, 0, 0.95);
+        color: white;
+        padding: 40px;
+        border-radius: 20px;
+        text-align: center;
+    }
+
+    @keyframes pulse {
+        from { transform: scale(1); opacity: 0.8; }
+        to { transform: scale(2); opacity: 0; }
+    }
+
+    @keyframes slideIn {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+    }
+
+    .fade-out {
+        animation: fadeOut 1s ease-out;
+    }
+
+    @keyframes fadeOut {
+        from { opacity: 1; }
+        to { opacity: 0; }
+    }
+
+    button {
+        background: #4CAF50;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 16px;
+        margin-top: 20px;
+    }
+
+    button:hover {
+        background: #45a049;
+    }
+`;
+
+document.head.appendChild(style);
+
 // WebSocket event handlers
 ws.onmessage = (event) => {
     const data = JSON.parse(event.data);
