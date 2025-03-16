@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Basketball Pro 2D</title>
+    <title>Basket Chaos Pro</title>
     <link rel="stylesheet" href="/styles/main.css">
 </head>
 <body>
@@ -11,79 +11,146 @@
         <canvas id="gameCanvas"></canvas>
         
         <div id="menu">
-            <h1>Basketball Pro 2D</h1>
+            <h1>Basket Chaos Pro</h1>
             <div id="game-modes">
                 <div class="game-mode-card" data-mode="classic">
                     <div class="game-mode-icon">🏀</div>
                     <h3>Classic</h3>
-                    <p>Score as many baskets as you can in 60 seconds!</p>
+                    <p>First to 5 points wins!</p>
                 </div>
-                <div class="game-mode-card" data-mode="time_attack">
+                <div class="game-mode-card" data-mode="timeAttack">
                     <div class="game-mode-icon">⏱️</div>
                     <h3>Time Attack</h3>
-                    <p>Each basket adds time. How long can you last?</p>
+                    <p>Score as much as possible in 60 seconds!</p>
                 </div>
-                <div class="game-mode-card" data-mode="trick_shot">
-                    <div class="game-mode-icon">🎯</div>
-                    <h3>Trick Shot</h3>
-                    <p>More bounces = more points!</p>
+                <div class="game-mode-card" data-mode="chaos">
+                    <div class="game-mode-icon">🌪️</div>
+                    <h3>Chaos</h3>
+                    <p>Random events every 5 seconds!</p>
                 </div>
                 <div class="game-mode-card" data-mode="survival">
                     <div class="game-mode-icon">💪</div>
                     <h3>Survival</h3>
-                    <p>Miss three shots and you're out!</p>
+                    <p>Three misses and you're out!</p>
+                </div>
+                <div class="game-mode-card" data-mode="trickshot">
+                    <div class="game-mode-icon">🎯</div>
+                    <h3>Trick Shot</h3>
+                    <p>Points multiply with each bounce!</p>
+                </div>
+                <div class="game-mode-card" data-mode="versus">
+                    <div class="game-mode-icon">⚔️</div>
+                    <h3>Versus</h3>
+                    <p>Battle against another player!</p>
                 </div>
             </div>
             <button class="button" id="playButton">Play Game</button>
             <button class="button" id="instructionsButton">Instructions</button>
-            <button class="button" id="tournamentButton">Tournament</button>
             <button class="button" id="leaderboardButton">Leaderboard</button>
         </div>
 
-        <div id="chat-container">
-            <div id="chat-messages"></div>
-            <input type="text" id="chat-input" placeholder="Type your message..." maxlength="200">
+        <div id="instructions" class="modal">
+            <h2>How to Play</h2>
+            <div class="controls-section">
+                <h3>Player 1</h3>
+                <p>W - Jump</p>
+                <p>A - Move Left</p>
+                <p>D - Move Right</p>
+            </div>
+            <div class="controls-section">
+                <h3>Player 2</h3>
+                <p>↑ - Jump</p>
+                <p>← - Move Left</p>
+                <p>→ - Move Right</p>
+            </div>
+            <div class="powerups-section">
+                <h3>Power-ups</h3>
+                <div class="powerup-item">
+                    <span class="powerup-icon">🦘</span>
+                    <span>Super Jump - Jump higher!</span>
+                </div>
+                <div class="powerup-item">
+                    <span class="powerup-icon">🏀</span>
+                    <span>Giant Ball - Easier to score!</span>
+                </div>
+                <div class="powerup-item">
+                    <span class="powerup-icon">⌛</span>
+                    <span>Time Freeze - Slows gravity!</span>
+                </div>
+                <div class="powerup-item">
+                    <span class="powerup-icon">🌠</span>
+                    <span>Anti-Gravity - Reverses gravity!</span>
+                </div>
+                <div class="powerup-item">
+                    <span class="powerup-icon">🎯</span>
+                    <span>Multiball - Spawns extra balls!</span>
+                </div>
+                <div class="powerup-item">
+                    <span class="powerup-icon">🌪️</span>
+                    <span>Tornado - Creates chaos!</span>
+                </div>
+            </div>
+            <button class="button" id="closeInstructions">Got it!</button>
         </div>
 
-        <div id="power-meter">
-            <div id="power-fill"></div>
+        <div id="leaderboard" class="modal">
+            <h2>Leaderboard</h2>
+            <div class="leaderboard-tabs">
+                <button class="tab-button active" data-mode="classic">Classic</button>
+                <button class="tab-button" data-mode="timeAttack">Time Attack</button>
+                <button class="tab-button" data-mode="trickshot">Trick Shot</button>
+            </div>
+            <div id="leaderboard-content"></div>
+            <button class="button" id="closeLeaderboard">Close</button>
+        </div>
+
+        <div id="game-ui">
+            <div id="score-container" class="game-stat">
+                <div class="player-score">P1: <span id="score-p1">0</span></div>
+                <div class="player-score">P2: <span id="score-p2">0</span></div>
+            </div>
+            <div id="timer-container" class="game-stat">Time: <span id="timer">60</span>s</div>
+            <div id="streak-container" class="game-stat">Streak: <span id="streak">0</span></div>
+            <div id="combo-counter">x3 COMBO!</div>
         </div>
 
         <div id="powerup-container"></div>
-        <div id="combo-counter">x3 COMBO!</div>
-        <div id="achievements-popup">
-            <div class="achievement-icon">🏆</div>
-            <h3>Achievement Unlocked!</h3>
-            <p>Sharp Shooter</p>
-        </div>
 
-        <div id="score-container" class="game-stat">Score: <span id="score">0</span></div>
-        <div id="timer-container" class="game-stat">Time: <span id="timer">60</span>s</div>
-        <div id="streak-container" class="game-stat">Streak: <span id="streak">0</span></div>
-
-        <div id="game-over" class="game-over">
+        <div id="game-over" class="modal">
             <h2>Game Over!</h2>
-            <p>Final Score: <span id="final-score">0</span></p>
-            <p>Best Streak: <span id="best-streak">0</span></p>
-            <p>Achievements: <span id="achievements-earned">0</span></p>
+            <div class="stats">
+                <p>Final Score: <span id="final-score">0</span></p>
+                <p>Best Streak: <span id="best-streak">0</span></p>
+                <p>Total Bounces: <span id="total-bounces">0</span></p>
+                <p>Power-ups Collected: <span id="powerups-collected">0</span></p>
+            </div>
+            <div class="achievements">
+                <h3>Achievements Unlocked</h3>
+                <div id="achievements-list"></div>
+            </div>
             <button class="button" id="play-again">Play Again</button>
             <button class="button" id="change-mode">Change Mode</button>
         </div>
+
+        <div id="achievements-popup">
+            <div class="achievement-icon">🏆</div>
+            <h3>Achievement Unlocked!</h3>
+            <p id="achievement-name"></p>
+        </div>
+
+        <div id="volume-controls">
+            <button id="mute-toggle">🔊</button>
+            <div class="volume-control">
+                <label for="music-volume">Music</label>
+                <input type="range" id="music-volume" min="0" max="1" step="0.1" value="0.5">
+            </div>
+            <div class="volume-control">
+                <label for="sfx-volume">Sound FX</label>
+                <input type="range" id="sfx-volume" min="0" max="1" step="0.1" value="0.7">
+            </div>
+        </div>
     </div>
 
-    <div id="volume-controls">
-        <button id="mute-toggle">🔊</button>
-        <div class="volume-control">
-            <label for="music-volume">Music</label>
-            <input type="range" id="music-volume" min="0" max="1" step="0.1" value="0.5">
-        </div>
-        <div class="volume-control">
-            <label for="sfx-volume">Sound FX</label>
-            <input type="range" id="sfx-volume" min="0" max="1" step="0.1" value="0.7">
-        </div>
-    </div>
-
-    <script src="/socket.io/socket.io.js"></script>
     <script src="/scripts/game.js"></script>
 </body>
 </html> 

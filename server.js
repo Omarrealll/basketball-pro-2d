@@ -14,7 +14,8 @@ const io = socketIO(server);
 // Middleware
 app.use(compression());
 app.use(cors());
-app.use(express.static(path.join(__dirname)));
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json());
 
 // Game constants
 const GAME_MODES = {
@@ -22,7 +23,8 @@ const GAME_MODES = {
     BATTLE_ROYALE: 'battle_royale',
     TIME_ATTACK: 'time_attack',
     TRICK_SHOT: 'trick_shot',
-    TOURNAMENT: 'tournament'
+    TOURNAMENT: 'tournament',
+    SURVIVAL: 'survival'
 };
 
 const ACHIEVEMENTS = {
@@ -192,165 +194,98 @@ function checkAchievements(player, gameState) {
     return newAchievements;
 }
 
-// WebSocket connection handling
+// Socket connection handling
 io.on('connection', (socket) => {
     console.log('Player connected:', socket.id);
-
-    // Initialize player
-    const playerName = `Player ${socket.id.substr(0, 4)}`;
+    
+    // Initialize player data
     players.set(socket.id, {
         id: socket.id,
-        name: playerName,
+        name: `Player ${socket.id.substr(0, 4)}`,
         score: 0,
-        room: null,
-        achievements: new Set(),
-        consecutiveBaskets: 0,
-        misses: 0,
-        quickBaskets: 0,
-        lastBasketTime: Date.now(),
-        collectedPowerups: new Set()
+        device: socket.handshake.headers['user-agent'].includes('Mobile') ? 'mobile' : 'desktop'
     });
 
-    // Send welcome message
-    const welcomeMessage = {
-        id: uuidv4(),
-        player: 'System',
-        message: `${playerName} joined the game`,
-        timestamp: Date.now()
-    };
-    
-    chatHistory.push(welcomeMessage);
-    if (chatHistory.length > CHAT_HISTORY_LENGTH) {
-        chatHistory.shift();
-    }
-    
-    // Send chat history to new player
-    socket.emit('chat_history', chatHistory);
-    io.emit('chat_message', welcomeMessage);
+    // Send initial game state
+    socket.emit('init', {
+        rooms: Array.from(gameRooms.entries()).map(([id, room]) => ({
+            id,
+            mode: room.mode,
+            players: room.players.length,
+            maxPlayers: GAME_MODES[room.mode].maxPlayers,
+            status: room.status
+        }))
+    });
 
     // Handle chat messages
     socket.on('chat_message', (data) => {
         const player = players.get(socket.id);
-        if (!player) return;
-
-        const messageObj = {
-            id: uuidv4(),
-            player: player.name,
-            message: data.message.slice(0, 200), // Limit message length
-            timestamp: Date.now()
-        };
-
-        chatHistory.push(messageObj);
-        if (chatHistory.length > CHAT_HISTORY_LENGTH) {
-            chatHistory.shift();
-        }
-
-        io.emit('chat_message', messageObj);
-    });
-
-    // Handle score updates
-    socket.on('score_update', (data) => {
-        const player = players.get(socket.id);
-        if (!player) return;
-
-        player.score = data.score;
-        io.emit('score_update', {
-            playerId: socket.id,
-            playerName: player.name,
-            score: data.score,
-            isBasket: data.isBasket
-        });
-    });
-
-    // Handle game end
-    socket.on('game_end', (data) => {
-        const player = players.get(socket.id);
-        if (!player) return;
-
-        const gameEndMessage = {
-            id: uuidv4(),
-            player: 'System',
-            message: `${player.name} finished with score: ${data.score}`,
-            timestamp: Date.now()
-        };
-
-        chatHistory.push(gameEndMessage);
-        if (chatHistory.length > CHAT_HISTORY_LENGTH) {
-            chatHistory.shift();
-        }
-
-        io.emit('chat_message', gameEndMessage);
-    });
-
-    // Handle disconnection
-    socket.on('disconnect', () => {
-        const player = players.get(socket.id);
-        if (player) {
-            const disconnectMessage = {
-                id: uuidv4(),
-                player: 'System',
-                message: `${player.name} left the game`,
-                timestamp: Date.now()
-            };
-
-            chatHistory.push(disconnectMessage);
-            if (chatHistory.length > CHAT_HISTORY_LENGTH) {
-                chatHistory.shift();
-            }
-
-            io.emit('chat_message', disconnectMessage);
-            players.delete(socket.id);
-        }
-        console.log('Player disconnected:', socket.id);
-    });
-
-    // Handle game events
-    socket.on('create_tournament', (data) => {
-        const roomId = Math.random().toString(36).substring(7);
-        gameRooms.set(roomId, {
-            id: roomId,
-            name: data.name,
-            players: new Set([socket.id]),
-            state: 'waiting'
-        });
-        
-        const player = players.get(socket.id);
-        player.room = roomId;
-        
-        socket.join(roomId);
-        socket.emit('tournament_created', { roomId });
-    });
-
-    socket.on('join_tournament', (data) => {
-        const room = gameRooms.get(data.roomId);
-        if (room && room.state === 'waiting') {
-            room.players.add(socket.id);
-            const player = players.get(socket.id);
-            player.room = data.roomId;
-            
-            socket.join(data.roomId);
-            if (room.players.size >= 2) {
-                room.state = 'playing';
-                io.to(data.roomId).emit('game_start');
-            }
-        }
-    });
-
-    socket.on('emote', (data) => {
-        const player = players.get(socket.id);
-        if (player && player.room) {
-            io.to(player.room).emit('player_emote', {
-                playerId: socket.id,
-                emote: data.emote
+        if (player && data.message) {
+            // Limit message length and sanitize
+            const message = data.message.substring(0, 200).replace(/[<>]/g, '');
+            io.emit('chat_message', {
+                player: player.name,
+                message: message
             });
         }
     });
 
-    // Send initial game state
-    socket.emit('game_state', {
-        players: Array.from(players.values()),
-        rooms: Array.from(gameRooms.values())
+    // Handle score updates
+    socket.on('score_update', ({ score, combo, bounces }) => {
+        const player = players.get(socket.id);
+        if (player) {
+            player.score = score;
+            io.emit('score_update', {
+                playerId: socket.id,
+                score,
+                combo,
+                bounces
+            });
+        }
     });
+
+    // Handle game over
+    socket.on('game_end', ({ score }) => {
+        const player = players.get(socket.id);
+        if (player) {
+            player.score = score;
+            io.emit('player_game_over', {
+                playerId: socket.id,
+                finalScore: score
+            });
+        }
+    });
+
+    // Handle disconnection
+    socket.on('disconnect', () => {
+        console.log('Player disconnected:', socket.id);
+        
+        // Remove player from any game rooms
+        gameRooms.forEach((room, roomId) => {
+            if (room.players.includes(socket.id)) {
+                room.players = room.players.filter(id => id !== socket.id);
+                if (room.players.length === 0) {
+                    gameRooms.delete(roomId);
+                }
+                io.emit('room_update', Array.from(gameRooms.values()));
+            }
+        });
+        
+        // Remove player from players list
+        players.delete(socket.id);
+        io.emit('player_left', socket.id);
+    });
+
+    // Performance optimization for mobile
+    const player = players.get(socket.id);
+    if (player && player.device === 'mobile') {
+        // Reduce update frequency for mobile devices
+        socket.conn.on('packet', (packet) => {
+            if (packet.type === 'ping') {
+                socket.conn.packetsFn = ['ping', 'pong'];
+            }
+        });
+    }
 });
 
 // Helper functions
@@ -549,6 +484,11 @@ function getGameSettings(gameMode) {
                 pointsMultiplier: 2,
                 gravity: 0.4
             };
+        case GAME_MODES.SURVIVAL:
+            return {
+                ...baseSettings,
+                lives: 3
+            };
         default:
             return baseSettings;
     }
@@ -560,6 +500,8 @@ function getGameDuration(gameMode) {
             return 120; // 2 minutes
         case GAME_MODES.BATTLE_ROYALE:
             return 300; // 5 minutes
+        case GAME_MODES.SURVIVAL:
+            return 120; // 2 minutes
         default:
             return 180; // 3 minutes
     }
@@ -585,6 +527,47 @@ function generateObstacles(gameMode) {
     
     return obstacles;
 }
+
+// Endpoint to serve the game
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Endpoint to get leaderboard data
+app.get('/api/leaderboard/:mode', (req, res) => {
+    const { mode } = req.params;
+    res.json(leaderboards[mode] || []);
+});
+
+// Endpoint to submit a score
+app.post('/api/score', (req, res) => {
+    const { mode, name, score, stats } = req.body;
+    
+    if (!mode || !name || typeof score !== 'number') {
+        return res.status(400).json({ error: 'Invalid score submission' });
+    }
+
+    // Add score to leaderboard
+    const entry = {
+        name,
+        score,
+        stats,
+        date: new Date().toISOString()
+    };
+
+    leaderboards[mode] = leaderboards[mode] || [];
+    leaderboards[mode].push(entry);
+
+    // Sort leaderboard by score (descending)
+    leaderboards[mode].sort((a, b) => b.score - a.score);
+
+    // Keep only top 100 scores
+    if (leaderboards[mode].length > 100) {
+        leaderboards[mode] = leaderboards[mode].slice(0, 100);
+    }
+
+    res.json({ success: true, rank: leaderboards[mode].findIndex(e => e === entry) + 1 });
+});
 
 // Start server
 const PORT = process.env.PORT || 3000;

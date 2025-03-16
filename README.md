@@ -1,46 +1,79 @@
-# Basketball Pro 2D - Multiplayer
+# Basket Chaos Pro 🏀
 
-A real-time multiplayer basketball game with power-ups, chat, and emotes!
-
-## Play Online
-
-Visit [https://basketball-pro-2d.onrender.com](https://basketball-pro-2d.onrender.com) to play the game directly in your browser!
+A chaotic and fun basketball game inspired by Basket Random, but with enhanced features and crazy power-ups!
 
 ## Features
 
-- Real-time multiplayer (up to 4 players per room)
-- Power-ups system
-- Live chat and emotes
-- Global leaderboard
-- Beautiful graphics and animations
-- Mobile-friendly controls
+- 🎮 6 Exciting Game Modes:
+  - Classic: First to 5 points wins!
+  - Time Attack: Score as much as possible in 60 seconds!
+  - Chaos: Random events every 5 seconds!
+  - Survival: Three misses and you're out!
+  - Trick Shot: Points multiply with each bounce!
+  - Versus: Battle against another player!
+
+- 🎯 Power-ups:
+  - Super Jump: Jump higher!
+  - Giant Ball: Easier to score!
+  - Time Freeze: Slows gravity!
+  - Anti-Gravity: Reverses gravity!
+  - Multiball: Spawns extra balls!
+  - Tornado: Creates chaos!
+
+- 🏆 Enhanced Features:
+  - Combo system for consecutive baskets
+  - Achievement system
+  - Global leaderboards
+  - Responsive design for mobile and desktop
+  - Sound effects and background music
+  - Volume controls
+  - Dark mode support
 
 ## How to Play
 
-1. Visit the game URL
-2. Create a new room or join an existing one
-3. Share the room code with friends
-4. Click and hold to aim, release to shoot
-5. Collect power-ups for special abilities
-6. Press 'E' for emotes
+1. Use W/A/D (Player 1) or Arrow Keys (Player 2) to move and jump
+2. Collect power-ups to gain advantages
+3. Score baskets to earn points
+4. Chain consecutive baskets for combos
+5. Unlock achievements and compete for high scores
 
-## Power-ups
+## Installation
 
-- 🎯 Perfect Shot: Reduced gravity and air resistance
-- 2× Double Points: Score twice the points
-- ⚪ Bigger Ball: Easier to score
-- ⏱ Slower Basket: Reduces basket movement speed
+1. Clone the repository:
+```bash
+git clone https://github.com/yourusername/basket-chaos-pro.git
+cd basket-chaos-pro
+```
+
+2. Install dependencies:
+```bash
+npm install
+```
+
+3. Start the server:
+```bash
+npm start
+```
+
+4. Open your browser and visit:
+```
+http://localhost:3000
+```
 
 ## Development
 
-To run the game locally:
+To run the game in development mode with auto-reload:
+```bash
+npm run dev
+```
 
-1. Install Node.js
-2. Clone this repository
-3. Run `npm install`
-4. Run `node server.js`
-5. Open `http://localhost:3000` in your browser
+## Credits
 
-## Deployment
+- Original game concept inspired by Basket Random
+- Enhanced with new features and improved gameplay mechanics
+- Sound effects from [freesound.org](https://freesound.org)
+- Icons from [Twemoji](https://twemoji.twitter.com)
 
-The game is automatically deployed to Render.com when changes are pushed to the main branch. 
+## License
+
+MIT License - feel free to use and modify! 

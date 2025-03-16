@@ -331,758 +331,405 @@ class Player {
 }
 
 // Game class
-class Game {
+class BasketChaosPro {
     constructor() {
-        this.initializeUI();
-        this.setupCanvas();
-        this.initializeGame();
-        this.setupEventListeners();
-        this.setupAudio();
-        this.setupGameModes();
-        this.setupParticleSystem();
-    }
-
-    initializeUI() {
         this.canvas = document.getElementById('gameCanvas');
         this.ctx = this.canvas.getContext('2d');
-        this.menu = document.getElementById('menu');
-        this.gameModeCards = document.querySelectorAll('.game-mode-card');
-        this.powerupContainer = document.getElementById('powerup-container');
-        this.comboCounter = document.getElementById('combo-counter');
-        this.achievementsPopup = document.getElementById('achievements-popup');
-        this.streakDisplay = document.getElementById('streak');
+        this.setupCanvas();
         
-        // Set canvas size
-        this.canvas.width = 800;
-        this.canvas.height = 600;
-        this.scale = 1;
-    }
-
-    initializeGame() {
-        // Enhanced ball physics
-        this.ball = {
-            x: 100,
-            y: 500,
-            radius: 15,
-            velocityX: 0,
-            velocityY: 0,
-            angularVelocity: 0,
-            rotation: 0,
-            isShot: false,
-            trail: [],
-            spin: 0,
-            magnus: 0.3, // Magnus effect coefficient
-            dragCoefficient: 0.001
-        };
-
-        // Enhanced basket with complex movement
-        this.basket = {
-            x: 700,
-            y: 300,
-            width: 60,
-            height: 50,
-            rimWidth: 10,
-            backboardHeight: 120,
-            backboardWidth: 10,
-            rimElasticity: 0.6,
-            netPoints: [],
-            movePattern: 'figure8',
-            patternPhase: 0,
-            oscillationSpeed: 0.02,
-            verticalRange: 100,
-            horizontalRange: 50,
-            rotation: 0,
-            rotationSpeed: 0.1
-        };
-
-        // Initialize net physics
-        for (let i = 0; i < 12; i++) {
-            this.basket.netPoints.push({
-                x: 0,
-                y: 0,
-                baseX: i * (this.basket.width / 11),
-                baseY: this.basket.height,
-                velocityX: 0,
-                velocityY: 0
-            });
-        }
-
-        // Advanced game state
-        this.score = 0;
-        this.streak = 0;
-        this.bounceCount = 0;
-        this.shotPower = 0;
-        this.shotAngle = 0;
-        this.isPoweringUp = false;
-        this.comboMultiplier = 1;
-        this.lastShotTime = 0;
-        this.perfectShotStreak = 0;
-        this.timeSlowFactor = 1;
-        this.activeEffects = new Set();
-        
-        // Physics constants
-        this.gravity = 0.5;
-        this.airDensity = 0.0012;
-        this.windSpeed = 0;
-        this.windDirection = 0;
-        this.temperature = 20; // Celsius
-    }
-
-    setupGameModes() {
-        this.gameModes = {
-            classic: {
-                name: 'Classic',
-                init: () => {
-                    this.timeLeft = 60;
-                    this.score = 0;
-                    this.streak = 0;
-                },
-                update: () => {
-                    this.timeLeft -= 1/60;
-                    if (this.timeLeft <= 0) this.endGame();
-                },
-                onScore: () => {
-                    this.score += 2 * (this.streak > 2 ? this.streak : 1);
-                }
-            },
-            time_attack: {
-                name: 'Time Attack',
-                init: () => {
-                    this.timeLeft = 30;
-                    this.score = 0;
-                    this.streak = 0;
-                },
-                update: () => {
-                    this.timeLeft -= 1/60;
-                    if (this.timeLeft <= 0) this.endGame();
-                },
-                onScore: () => {
-                    this.score += 2;
-                    this.timeLeft += 5; // Add 5 seconds for each basket
-                    this.showTimeBonus('+5s');
-                }
-            },
-            trick_shot: {
-                name: 'Trick Shot',
-                init: () => {
-                    this.timeLeft = 60;
-                    this.score = 0;
-                    this.bounceCount = 0;
-                    this.streak = 0;
-                },
-                update: () => {
-                    this.timeLeft -= 1/60;
-                    if (this.timeLeft <= 0) this.endGame();
-                },
-                onScore: () => {
-                    const bounceMultiplier = Math.max(1, this.bounceCount);
-                    const points = 2 * bounceMultiplier * (this.streak > 2 ? this.streak : 1);
-                    this.score += points;
-                    this.showPointsBonus(`+${points}`);
-                }
-            },
-            survival: {
-                name: 'Survival',
-                init: () => {
-                    this.lives = 3;
-                    this.score = 0;
-                    this.streak = 0;
-                },
-                update: () => {
-                    if (this.lives <= 0) this.endGame();
-                },
-                onScore: () => {
-                    this.score += 2 * (this.streak > 2 ? this.streak : 1);
-                },
-                onMiss: () => {
-                    this.lives--;
-                    this.showLivesLost();
-                }
-            }
-        };
-
+        // Game state
+        this.gameState = 'menu'; // menu, playing, gameOver
+        this.players = [];
+        this.ball = null;
+        this.score = [0, 0];
+        this.roundsToWin = 5;
         this.currentMode = 'classic';
-    }
-
-    setupAudio() {
-        this.sounds = {
-            bounce: new Audio('https://assets.mixkit.co/sfx/preview/mixkit-game-ball-tap-2073.wav'),
-            score: new Audio('https://assets.mixkit.co/sfx/preview/mixkit-achievement-bell-600.wav'),
-            powerup: new Audio('https://assets.mixkit.co/sfx/preview/mixkit-game-powerup-2019.wav'),
-            combo: new Audio('https://assets.mixkit.co/sfx/preview/mixkit-winning-chimes-2015.wav'),
-            gameOver: new Audio('https://assets.mixkit.co/sfx/preview/mixkit-game-over-trombone-1940.wav')
+        this.gravity = 0.5;
+        this.windForce = 0;
+        this.powerups = [];
+        this.effects = [];
+        this.combo = 0;
+        this.maxCombo = 0;
+        
+        // Enhanced features
+        this.powerupTypes = [
+            { name: 'superJump', icon: '🦘', duration: 5000 },
+            { name: 'giantBall', icon: '🏀', duration: 8000 },
+            { name: 'timeFreeze', icon: '⌛', duration: 3000 },
+            { name: 'antiGravity', icon: '🌠', duration: 4000 },
+            { name: 'multiball', icon: '🎯', duration: 6000 },
+            { name: 'tornado', icon: '🌪️', duration: 4000 }
+        ];
+        
+        // Game modes
+        this.gameModes = {
+            classic: { name: 'Classic', icon: '🏀', description: 'First to 5 points wins!' },
+            timeAttack: { name: 'Time Attack', icon: '⏱️', description: 'Score as much as possible in 60 seconds!' },
+            chaos: { name: 'Chaos', icon: '🌪️', description: 'Random events every 5 seconds!' },
+            survival: { name: 'Survival', icon: '💪', description: 'Three misses and you\'re out!' },
+            trickshot: { name: 'Trick Shot', icon: '🎯', description: 'Points multiply with each bounce!' },
+            versus: { name: 'Versus', icon: '⚔️', description: 'Battle against another player!' }
         };
 
-        Object.values(this.sounds).forEach(sound => {
-            sound.load();
-            sound.volume = 0.3;
-        });
+        // Sound effects
+        this.sounds = {
+            bounce: new Audio('/assets/sounds/bounce.mp3'),
+            score: new Audio('/assets/sounds/score.mp3'),
+            powerup: new Audio('/assets/sounds/powerup.mp3'),
+            crowd: new Audio('/assets/sounds/crowd.mp3'),
+            music: new Audio('/assets/sounds/background.mp3')
+        };
+
+        // Initialize controls
+        this.initControls();
+        
+        // Start game loop
+        this.lastTime = 0;
+        this.animate = this.animate.bind(this);
+        requestAnimationFrame(this.animate);
     }
 
-    setupEventListeners() {
-        // Game mode selection
-        this.gameModeCards.forEach(card => {
-            card.addEventListener('click', () => {
-                this.gameModeCards.forEach(c => c.classList.remove('selected'));
-                card.classList.add('selected');
-                this.currentMode = card.dataset.mode;
-            });
-        });
+    setupCanvas() {
+        // Make canvas responsive
+        const resize = () => {
+            const width = Math.min(800, window.innerWidth - 20);
+            const height = (width * 3) / 4;
+            this.canvas.width = width;
+            this.canvas.height = height;
+            this.scale = width / 800; // Base scale for all game objects
+        };
+        
+        window.addEventListener('resize', resize);
+        resize();
+    }
 
-        // Mouse/Touch controls
-        if ('ontouchstart' in window) {
-            this.setupTouchControls();
-        } else {
-            this.setupMouseControls();
-        }
-
+    initControls() {
         // Keyboard controls
+        const keys = {
+            player1: { up: 'w', left: 'a', right: 'd' },
+            player2: { up: 'ArrowUp', left: 'ArrowLeft', right: 'ArrowRight' }
+        };
+        
+        this.controls = {
+            player1: { up: false, left: false, right: false },
+            player2: { up: false, left: false, right: false }
+        };
+
         document.addEventListener('keydown', (e) => {
-            if (e.code === 'Space' && this.gameOver) {
-                this.restartGame();
-            }
+            this.handleKeyPress(e.key, true);
         });
+
+        document.addEventListener('keyup', (e) => {
+            this.handleKeyPress(e.key, false);
+        });
+
+        // Touch controls for mobile
+        if ('ontouchstart' in window) {
+            this.initTouchControls();
+        }
     }
 
-    setupTouchControls() {
+    initTouchControls() {
+        const touchZones = {
+            left: { x: 0, w: this.canvas.width * 0.3 },
+            middle: { x: this.canvas.width * 0.3, w: this.canvas.width * 0.4 },
+            right: { x: this.canvas.width * 0.7, w: this.canvas.width * 0.3 }
+        };
+
         this.canvas.addEventListener('touchstart', (e) => {
             e.preventDefault();
-            if (!this.ball.isShot) {
-                const touch = e.touches[0];
-                const rect = this.canvas.getBoundingClientRect();
-                this.startPowerUp(touch.clientX - rect.left, touch.clientY - rect.top);
-            }
-        });
-
-        this.canvas.addEventListener('touchmove', (e) => {
-            e.preventDefault();
-            if (this.isPoweringUp) {
-                const touch = e.touches[0];
-                const rect = this.canvas.getBoundingClientRect();
-                this.updateAim(touch.clientX - rect.left, touch.clientY - rect.top);
+            const touch = e.touches[0];
+            const x = touch.clientX - this.canvas.offsetLeft;
+            
+            if (x < touchZones.left.x + touchZones.left.w) {
+                this.controls.player1.left = true;
+            } else if (x > touchZones.right.x) {
+                this.controls.player1.right = true;
+            } else {
+                this.controls.player1.up = true;
             }
         });
 
         this.canvas.addEventListener('touchend', () => {
-            if (this.isPoweringUp) {
-                this.shootBall();
-            }
-        });
-    }
-
-    setupMouseControls() {
-        this.canvas.addEventListener('mousedown', (e) => {
-            if (!this.ball.isShot) {
-                const rect = this.canvas.getBoundingClientRect();
-                this.startPowerUp(e.clientX - rect.left, e.clientY - rect.top);
-            }
-        });
-
-        this.canvas.addEventListener('mousemove', (e) => {
-            const rect = this.canvas.getBoundingClientRect();
-            this.updateAim(e.clientX - rect.left, e.clientY - rect.top);
-        });
-
-        this.canvas.addEventListener('mouseup', () => {
-            if (this.isPoweringUp) {
-                this.shootBall();
-            }
-        });
-    }
-
-    startGame() {
-        const mode = this.gameModes[this.currentMode];
-        mode.init();
-        this.gameOver = false;
-        this.isPoweringUp = false;
-        this.power = 0;
-        this.resetBall();
-        this.activePowerups.clear();
-        
-        // Hide menu and show game UI
-        this.menu.style.display = 'none';
-        document.getElementById('game-ui').style.display = 'flex';
-        
-        // Start game loop
-        this.gameLoop();
-    }
-
-    updateGame() {
-        const mode = this.gameModes[this.currentMode];
-        mode.update();
-
-        if (this.ball.isShot) {
-            this.updateBall();
-            this.updatePowerups();
-        }
-
-        this.updateUI();
-    }
-
-    updateBall() {
-        if (!this.ball.isShot) return;
-
-        // Store trail with interpolation
-        const trailSpacing = 5;
-        const lastTrail = this.ball.trail[this.ball.trail.length - 1];
-        if (!lastTrail || 
-            Math.hypot(this.ball.x - lastTrail.x, this.ball.y - lastTrail.y) > trailSpacing) {
-            this.ball.trail.push({
-                x: this.ball.x,
-                y: this.ball.y,
-                rotation: this.ball.rotation
+            Object.keys(this.controls.player1).forEach(key => {
+                this.controls.player1[key] = false;
             });
-            if (this.ball.trail.length > 15) this.ball.trail.shift();
-        }
-
-        // Create motion particles
-        if (Math.hypot(this.ball.velocityX, this.ball.velocityY) > 5) {
-            this.createParticles('TRAIL', this.ball.x, this.ball.y, 1);
-        }
-
-        // Apply Magnus force (spin effect)
-        const magnusForceY = this.ball.spin * this.ball.velocityX * this.ball.magnus;
-        const magnusForceX = -this.ball.spin * this.ball.velocityY * this.ball.magnus;
-
-        // Apply wind effect
-        const windEffect = this.calculateWindEffect();
-
-        // Apply drag force
-        const speed = Math.hypot(this.ball.velocityX, this.ball.velocityY);
-        const dragMagnitude = this.ball.dragCoefficient * speed * speed;
-        const dragForceX = -this.ball.velocityX * dragMagnitude / speed;
-        const dragForceY = -this.ball.velocityY * dragMagnitude / speed;
-
-        // Update velocities with all forces
-        this.ball.velocityX += (magnusForceX + dragForceX + windEffect.x) * this.timeSlowFactor;
-        this.ball.velocityY += (this.gravity + magnusForceY + dragForceY + windEffect.y) * this.timeSlowFactor;
-
-        // Update position
-        this.ball.x += this.ball.velocityX * this.timeSlowFactor;
-        this.ball.y += this.ball.velocityY * this.timeSlowFactor;
-
-        // Update rotation
-        this.ball.rotation += this.ball.angularVelocity * this.timeSlowFactor;
-        
-        // Check collisions
-        this.checkCollisions();
+        });
     }
 
-    calculateWindEffect() {
-        const time = Date.now() * 0.001;
-        this.windSpeed = Math.sin(time * 0.1) * 0.1; // Varying wind speed
-        this.windDirection = Math.sin(time * 0.05) * Math.PI; // Varying wind direction
+    handleKeyPress(key, isDown) {
+        const { player1, player2 } = this.controls;
         
-        return {
-            x: Math.cos(this.windDirection) * this.windSpeed,
-            y: Math.sin(this.windDirection) * this.windSpeed
-        };
-    }
-
-    checkCollisions() {
-        // Wall collisions with realistic bounce
-        if (this.ball.x - this.ball.radius < 0 || 
-            this.ball.x + this.ball.radius > this.canvas.width) {
-            this.ball.x = this.ball.x - this.ball.radius < 0 ? 
-                         this.ball.radius : this.canvas.width - this.ball.radius;
-            this.ball.velocityX *= -this.bounce;
-            this.ball.spin *= -0.8; // Reverse spin on wall hit
-            this.bounceCount++;
-            this.createParticles('BOUNCE', this.ball.x, this.ball.y, 10);
-            this.playSound('bounce');
-        }
-
-        // Ceiling collision
-        if (this.ball.y - this.ball.radius < 0) {
-            this.ball.y = this.ball.radius;
-            this.ball.velocityY *= -this.bounce;
-            this.bounceCount++;
-            this.createParticles('BOUNCE', this.ball.x, this.ball.y, 10);
-            this.playSound('bounce');
-        }
-
-        // Floor collision with friction
-        if (this.ball.y + this.ball.radius > this.canvas.height) {
-            this.ball.y = this.canvas.height - this.ball.radius;
-            this.ball.velocityY *= -this.bounce;
-            this.ball.velocityX *= 0.8; // Friction
-            this.ball.spin *= 0.8; // Reduce spin
-            this.bounceCount++;
-            this.createParticles('BOUNCE', this.ball.x, this.ball.y, 10);
-            this.playSound('bounce');
-        }
-
-        // Basket collision
-        if (this.checkBasketCollision()) {
-            this.handleScore();
+        switch(key) {
+            case 'w': player1.up = isDown; break;
+            case 'a': player1.left = isDown; break;
+            case 'd': player1.right = isDown; break;
+            case 'ArrowUp': player2.up = isDown; break;
+            case 'ArrowLeft': player2.left = isDown; break;
+            case 'ArrowRight': player2.right = isDown; break;
         }
     }
 
-    handleScore() {
-        // Calculate score multiplier based on various factors
-        let multiplier = 1;
-        
-        // Distance bonus
-        const distance = Math.hypot(this.ball.x - 100, this.ball.y - 500);
-        if (distance > 400) multiplier *= 1.5;
-        if (distance > 600) multiplier *= 1.2;
-        
-        // Speed bonus (swish)
-        const speed = Math.hypot(this.ball.velocityX, this.ball.velocityY);
-        if (speed < 10) multiplier *= 1.2;
-        
-        // Bounce bonus
-        multiplier *= (1 + this.bounceCount * 0.3);
-        
-        // Streak bonus
-        if (this.streak > 2) multiplier *= (1 + (this.streak - 2) * 0.1);
-        
-        // Perfect timing bonus
-        if (this.perfectShotStreak > 0) multiplier *= (1 + this.perfectShotStreak * 0.2);
-        
-        // Calculate final score
-        const basePoints = 2;
-        const points = Math.floor(basePoints * multiplier);
-        
-        // Update score and streak
-        this.score += points;
-        this.streak++;
-        
-        // Create score particles
-        this.createParticles('SCORE', this.basket.x, this.basket.y, 20);
-        
-        // Show score popup
-        this.showScorePopup(points, multiplier > 1.5);
-        
-        // Play appropriate sound
-        this.playSound(speed < 10 ? 'swish' : 'score');
-        
-        // Reset ball
-        this.resetBall();
-        
-        // Trigger special effects on impressive shots
-        if (multiplier > 2) {
-            this.triggerSlowMotion(0.5, 1);
-        }
-    }
-
-    triggerSlowMotion(factor, duration) {
-        this.timeSlowFactor = factor;
-        setTimeout(() => {
-            this.timeSlowFactor = 1;
-        }, duration * 1000);
-    }
-
-    shootBall() {
-        if (!this.ball.isShot) {
-            const angle = Math.atan2(this.mouseY - this.ball.y, this.mouseX - this.ball.x);
-            const power = Math.min(this.shotPower, 100);
+    spawnPowerup() {
+        if (Math.random() < 0.02 && this.powerups.length < 3) { // 2% chance each frame
+            const type = this.powerupTypes[Math.floor(Math.random() * this.powerupTypes.length)];
+            const x = Math.random() * (this.canvas.width - 40) + 20;
+            const y = Math.random() * (this.canvas.height / 2) + 20;
             
-            this.ball.velocityX = Math.cos(angle) * power * 0.2;
-            this.ball.velocityY = Math.sin(angle) * power * 0.2;
-            this.ball.spin = (this.mouseY - this.ball.y) * 0.01; // Add spin based on shot angle
-            this.ball.isShot = true;
-            
-            // Reset shot parameters
-            this.shotPower = 0;
-            this.isPoweringUp = false;
-            
-            // Create shooting effect particles
-            this.createParticles('TRAIL', this.ball.x, this.ball.y, 20);
-        }
-    }
-
-    setupParticleSystem() {
-        this.particles = [];
-        this.particleTypes = {
-            TRAIL: {
-                lifetime: 0.5,
-                size: 3,
-                color: '#ff6b6b',
-                gravity: 0.1,
-                spread: 0.2
-            },
-            SCORE: {
-                lifetime: 1,
-                size: 5,
-                color: '#ffd700',
-                gravity: -0.5,
-                spread: 1
-            },
-            BOUNCE: {
-                lifetime: 0.3,
-                size: 4,
-                color: '#ffffff',
-                gravity: 0,
-                spread: 0.5
-            }
-        };
-    }
-
-    createParticles(type, x, y, count) {
-        const settings = this.particleTypes[type];
-        for (let i = 0; i < count; i++) {
-            this.particles.push({
+            this.powerups.push({
+                type,
                 x,
                 y,
-                vx: (Math.random() - 0.5) * settings.spread,
-                vy: (Math.random() - 0.5) * settings.spread,
-                life: settings.lifetime,
-                maxLife: settings.lifetime,
-                size: settings.size,
-                color: settings.color,
-                gravity: settings.gravity
+                width: 30 * this.scale,
+                height: 30 * this.scale,
+                collected: false,
+                spawnTime: Date.now()
             });
         }
     }
 
-    updateParticles() {
-        this.particles = this.particles.filter(p => {
-            p.x += p.vx;
-            p.y += p.vy;
-            p.vy += p.gravity;
-            p.life -= 1/60;
-            return p.life > 0;
-        });
-    }
-
-    drawParticles() {
-        this.particles.forEach(p => {
-            this.ctx.globalAlpha = p.life / p.maxLife;
-            this.ctx.fillStyle = p.color;
-            this.ctx.beginPath();
-            this.ctx.arc(p.x, p.y, p.size * (p.life / p.maxLife), 0, Math.PI * 2);
-            this.ctx.fill();
-        });
-        this.ctx.globalAlpha = 1;
-    }
-
-    showCombo() {
-        this.comboCounter.textContent = `x${this.streak} COMBO!`;
-        this.comboCounter.classList.add('show');
-        setTimeout(() => {
-            this.comboCounter.classList.remove('show');
-        }, 1000);
-    }
-
-    showTimeBonus(text) {
-        const bonus = document.createElement('div');
-        bonus.className = 'time-bonus';
-        bonus.textContent = text;
-        document.body.appendChild(bonus);
+    applyPowerup(player, powerup) {
+        this.sounds.powerup.play();
+        const duration = powerup.type.duration;
         
-        setTimeout(() => {
-            bonus.remove();
-        }, 1000);
-    }
-
-    showPointsBonus(text) {
-        const bonus = document.createElement('div');
-        bonus.className = 'points-bonus';
-        bonus.textContent = text;
-        document.body.appendChild(bonus);
-        
-        setTimeout(() => {
-            bonus.remove();
-        }, 1000);
-    }
-
-    showLivesLost() {
-        const hearts = '❤️'.repeat(this.lives) + '🖤'.repeat(3 - this.lives);
-        const lives = document.createElement('div');
-        lives.className = 'lives-indicator';
-        lives.textContent = hearts;
-        document.body.appendChild(lives);
-        
-        setTimeout(() => {
-            lives.remove();
-        }, 1000);
-    }
-
-    endGame() {
-        this.gameOver = true;
-        this.playSound('gameOver');
-        
-        // Update high scores
-        const highScore = localStorage.getItem(`highScore_${this.currentMode}`) || 0;
-        if (this.score > highScore) {
-            localStorage.setItem(`highScore_${this.currentMode}`, this.score);
-        }
-        
-        // Show game over screen
-        document.getElementById('final-score').textContent = this.score;
-        document.getElementById('best-streak').textContent = this.streak;
-        document.getElementById('game-over').style.display = 'block';
-    }
-
-    restartGame() {
-        this.startGame();
-    }
-
-    updateBasket() {
-        const time = Date.now() * 0.001;
-        
-        switch (this.basket.movePattern) {
-            case 'figure8':
-                this.basket.x = 700 + Math.cos(time * this.basket.oscillationSpeed) * this.basket.horizontalRange;
-                this.basket.y = 300 + Math.sin(2 * time * this.basket.oscillationSpeed) * this.basket.verticalRange;
+        switch(powerup.type.name) {
+            case 'superJump':
+                player.jumpForce *= 1.5;
+                setTimeout(() => { player.jumpForce /= 1.5; }, duration);
                 break;
-            case 'circular':
-                this.basket.x = 700 + Math.cos(time * this.basket.oscillationSpeed) * this.basket.horizontalRange;
-                this.basket.y = 300 + Math.sin(time * this.basket.oscillationSpeed) * this.basket.verticalRange;
+            case 'giantBall':
+                this.ball.radius *= 2;
+                setTimeout(() => { this.ball.radius /= 2; }, duration);
                 break;
-            case 'pendulum':
-                this.basket.x = 700 + Math.sin(time * this.basket.oscillationSpeed) * this.basket.horizontalRange;
+            case 'timeFreeze':
+                const oldGravity = this.gravity;
+                this.gravity = 0.1;
+                setTimeout(() => { this.gravity = oldGravity; }, duration);
+                break;
+            case 'antiGravity':
+                this.gravity *= -1;
+                setTimeout(() => { this.gravity *= -1; }, duration);
+                break;
+            case 'multiball':
+                this.spawnExtraBalls();
+                break;
+            case 'tornado':
+                this.startTornado();
                 break;
         }
-
-        // Update basket rotation
-        this.basket.rotation = Math.sin(time * this.basket.rotationSpeed) * 0.2;
-
-        // Update net physics
-        this.updateNetPhysics();
     }
 
-    updateNetPhysics() {
-        const netStiffness = 0.3;
-        const netDamping = 0.8;
-        const gravity = 0.2;
-
-        this.basket.netPoints.forEach((point, i) => {
-            // Calculate base position in basket space
-            const baseX = this.basket.x + point.baseX * Math.cos(this.basket.rotation) -
-                         point.baseY * Math.sin(this.basket.rotation);
-            const baseY = this.basket.y + point.baseX * Math.sin(this.basket.rotation) +
-                         point.baseY * Math.cos(this.basket.rotation);
-
-            // Apply spring forces
-            const dx = baseX - point.x;
-            const dy = baseY - point.y;
-            point.velocityX += dx * netStiffness;
-            point.velocityY += dy * netStiffness;
-
-            // Apply gravity
-            point.velocityY += gravity;
-
-            // Apply damping
-            point.velocityX *= netDamping;
-            point.velocityY *= netDamping;
-
-            // Update position
-            point.x += point.velocityX;
-            point.y += point.velocityY;
-        });
+    spawnExtraBalls() {
+        for (let i = 0; i < 2; i++) {
+            const extraBall = { ...this.ball };
+            extraBall.x += (Math.random() - 0.5) * 50;
+            extraBall.y -= Math.random() * 50;
+            this.balls.push(extraBall);
+        }
+        setTimeout(() => {
+            this.balls = [this.ball];
+        }, 6000);
     }
 
-    drawBasket() {
-        this.ctx.save();
+    startTornado() {
+        this.tornado = {
+            x: this.canvas.width / 2,
+            y: this.canvas.height / 2,
+            radius: 100,
+            strength: 2,
+            duration: 4000,
+            startTime: Date.now()
+        };
+    }
+
+    updateTornado() {
+        if (!this.tornado) return;
         
-        // Transform for basket rotation
-        this.ctx.translate(this.basket.x, this.basket.y);
-        this.ctx.rotate(this.basket.rotation);
-        
-        // Draw backboard with glass effect
-        this.ctx.fillStyle = '#ffffff33';
-        this.ctx.fillRect(
-            -this.basket.width/2 - this.basket.backboardWidth,
-            -this.basket.backboardHeight/2,
-            this.basket.backboardWidth,
-            this.basket.backboardHeight
-        );
-        
-        // Draw rim
-        this.ctx.fillStyle = '#e94560';
-        this.ctx.fillRect(-this.basket.width/2, -this.basket.rimWidth/2,
-                         this.basket.width, this.basket.rimWidth);
-        
-        // Draw net
-        this.ctx.beginPath();
-        this.ctx.moveTo(-this.basket.width/2, 0);
-        this.basket.netPoints.forEach((point, i) => {
-            if (i === 0) {
-                this.ctx.moveTo(point.x - this.basket.x, point.y - this.basket.y);
-            } else {
-                this.ctx.lineTo(point.x - this.basket.x, point.y - this.basket.y);
+        const elapsed = Date.now() - this.tornado.startTime;
+        if (elapsed > this.tornado.duration) {
+            this.tornado = null;
+            return;
+        }
+
+        // Move all objects towards tornado center
+        [this.ball, ...this.players].forEach(obj => {
+            const dx = this.tornado.x - obj.x;
+            const dy = this.tornado.y - obj.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            if (dist < this.tornado.radius) {
+                const force = (1 - dist / this.tornado.radius) * this.tornado.strength;
+                obj.velocityX += (dx / dist) * force;
+                obj.velocityY += (dy / dist) * force;
             }
         });
-        this.ctx.strokeStyle = '#ffffff';
-        this.ctx.lineWidth = 2;
-        this.ctx.stroke();
+    }
+
+    animate(currentTime) {
+        const deltaTime = currentTime - this.lastTime;
+        this.lastTime = currentTime;
+
+        // Clear canvas
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        switch(this.gameState) {
+            case 'menu':
+                this.drawMenu();
+                break;
+            case 'playing':
+                this.update(deltaTime);
+                this.draw();
+                break;
+            case 'gameOver':
+                this.drawGameOver();
+                break;
+        }
+
+        requestAnimationFrame(this.animate);
+    }
+
+    update(deltaTime) {
+        // Update game physics
+        this.updatePlayers(deltaTime);
+        this.updateBall(deltaTime);
+        this.updatePowerups();
+        this.updateTornado();
+        this.checkCollisions();
+        this.checkScore();
         
-        // Draw rim highlight
-        this.ctx.shadowColor = '#ff0000';
-        this.ctx.shadowBlur = 10;
-        this.ctx.strokeStyle = '#ff6b6b';
-        this.ctx.lineWidth = 3;
-        this.ctx.strokeRect(-this.basket.width/2, -this.basket.rimWidth/2,
-                          this.basket.width, this.basket.rimWidth);
+        // Random events in chaos mode
+        if (this.currentMode === 'chaos' && Math.random() < 0.005) {
+            this.triggerRandomEvent();
+        }
+    }
+
+    triggerRandomEvent() {
+        const events = [
+            () => { this.gravity *= -1; setTimeout(() => { this.gravity *= -1; }, 3000); },
+            () => { this.windForce = (Math.random() - 0.5) * 2; setTimeout(() => { this.windForce = 0; }, 4000); },
+            () => { this.startTornado(); },
+            () => { this.ball.radius *= Math.random() + 0.5; setTimeout(() => { this.ball.radius = 15; }, 5000); },
+            () => { this.players.forEach(p => p.jumpForce *= 1.5); setTimeout(() => { this.players.forEach(p => p.jumpForce /= 1.5); }, 3000); }
+        ];
+
+        const randomEvent = events[Math.floor(Math.random() * events.length)];
+        randomEvent();
+    }
+
+    draw() {
+        // Draw background
+        this.drawBackground();
+        
+        // Draw game elements
+        this.drawPlayers();
+        this.drawBall();
+        this.drawPowerups();
+        this.drawEffects();
+        this.drawUI();
+        
+        if (this.tornado) {
+            this.drawTornado();
+        }
+    }
+
+    drawBackground() {
+        // Gradient background
+        const gradient = this.ctx.createLinearGradient(0, 0, 0, this.canvas.height);
+        gradient.addColorStop(0, '#1a1a1a');
+        gradient.addColorStop(1, '#2a2a2a');
+        this.ctx.fillStyle = gradient;
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Court lines
+        this.ctx.strokeStyle = '#ffffff33';
+        this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, this.canvas.height - 100);
+        this.ctx.lineTo(this.canvas.width, this.canvas.height - 100);
+        this.ctx.stroke();
+    }
+
+    drawTornado() {
+        const elapsed = Date.now() - this.tornado.startTime;
+        const alpha = Math.max(0, 1 - elapsed / this.tornado.duration);
+        
+        this.ctx.save();
+        this.ctx.globalAlpha = alpha;
+        this.ctx.beginPath();
+        this.ctx.arc(this.tornado.x, this.tornado.y, this.tornado.radius, 0, Math.PI * 2);
+        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+        this.ctx.fill();
+        
+        // Draw swirl effect
+        for (let i = 0; i < 5; i++) {
+            const angle = (Date.now() / 1000 + i / 5) * Math.PI * 2;
+            const x = this.tornado.x + Math.cos(angle) * this.tornado.radius * 0.5;
+            const y = this.tornado.y + Math.sin(angle) * this.tornado.radius * 0.5;
+            
+            this.ctx.beginPath();
+            this.ctx.arc(x, y, 5, 0, Math.PI * 2);
+            this.ctx.fillStyle = 'white';
+            this.ctx.fill();
+        }
         
         this.ctx.restore();
     }
 
-    checkBasketCollision() {
-        return (
-            this.ball.x > this.basket.x &&
-            this.ball.x < this.basket.x + this.basket.width &&
-            this.ball.y > this.basket.y &&
-            this.ball.y < this.basket.y + this.basket.height &&
-            this.ball.velocityY > 0  // Ball must be moving downward
-        );
+    startGame(mode) {
+        this.currentMode = mode;
+        this.gameState = 'playing';
+        this.score = [0, 0];
+        this.combo = 0;
+        this.maxCombo = 0;
+        this.powerups = [];
+        this.effects = [];
+        
+        // Initialize players
+        this.players = [
+            this.createPlayer(1, this.canvas.width * 0.25),
+            this.createPlayer(2, this.canvas.width * 0.75)
+        ];
+        
+        // Initialize ball
+        this.ball = this.createBall();
+        
+        // Start background music
+        this.sounds.music.loop = true;
+        this.sounds.music.play();
     }
 
-    showScorePopup(points, isSpecial) {
-        const popup = document.createElement('div');
-        popup.className = 'score-popup' + (isSpecial ? ' special' : '');
-        popup.textContent = `+${points}`;
-        
-        // Position popup near basket
-        popup.style.left = `${this.basket.x}px`;
-        popup.style.top = `${this.basket.y}px`;
-        
-        document.body.appendChild(popup);
-        
-        // Animate and remove
-        setTimeout(() => popup.remove(), 1000);
+    createPlayer(id, x) {
+        return {
+            id,
+            x,
+            y: this.canvas.height - 150,
+            width: 40 * this.scale,
+            height: 60 * this.scale,
+            velocityX: 0,
+            velocityY: 0,
+            speed: 5,
+            jumpForce: 15,
+            isJumping: false,
+            color: id === 1 ? '#4CAF50' : '#2196F3'
+        };
     }
 
-    updatePowerups() {
-        for (const [type, data] of this.activePowerups.entries()) {
-            data.timeLeft -= 1/60;
-            if (data.timeLeft <= 0) {
-                this.activePowerups.delete(type);
-            }
-        }
-        
-        if (this.activePowerups.size > 0) {
-            const powerupText = Array.from(this.activePowerups.entries())
-                .map(([type, data]) => `${POWERUP_TYPES[type].symbol} ${Math.ceil(data.timeLeft)}s`)
-                .join(' ');
-            document.getElementById('powerupIndicator').textContent = powerupText;
-        } else {
-            document.getElementById('powerupIndicator').style.display = 'none';
-        }
+    createBall() {
+        return {
+            x: this.canvas.width / 2,
+            y: this.canvas.height / 2,
+            radius: 15 * this.scale,
+            velocityX: 0,
+            velocityY: 0,
+            bounces: 0,
+            lastTouchedBy: null
+        };
     }
-
-    showEmote(playerId, emote) {
-        const player = gameState.players[playerId];
-        if (!player) return;
-        
-        const emoteDiv = document.createElement('div');
-        emoteDiv.className = 'emoji-reaction';
-        emoteDiv.textContent = emote;
-        emoteDiv.style.left = `${player.x}px`;
-        emoteDiv.style.top = `${player.y - 30}px`;
-        document.getElementById('gameContainer').appendChild(emoteDiv);
-        
-        setTimeout(() => emoteDiv.remove(), 1000);
-    }
-
-    // ... rest of the existing methods ...
 }
 
-// Initialize game when page loads
-window.addEventListener('load', () => {
-    const game = new Game();
+// Initialize game when DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+    new BasketChaosPro();
 });
 
 // Add CSS styles for new UI elements
