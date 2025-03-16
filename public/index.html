@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Basketball Pro 2D</title>
+    <link rel="stylesheet" href="/styles/main.css">
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        
+        <div id="menu">
+            <h1>Basketball Pro 2D</h1>
+            <div id="game-modes">
+                <div class="game-mode-card" data-mode="classic">
+                    <div class="game-mode-icon">🏀</div>
+                    <h3>Classic</h3>
+                    <p>Score as many baskets as you can in 60 seconds!</p>
+                </div>
+                <div class="game-mode-card" data-mode="time_attack">
+                    <div class="game-mode-icon">⏱️</div>
+                    <h3>Time Attack</h3>
+                    <p>Each basket adds time. How long can you last?</p>
+                </div>
+                <div class="game-mode-card" data-mode="trick_shot">
+                    <div class="game-mode-icon">🎯</div>
+                    <h3>Trick Shot</h3>
+                    <p>More bounces = more points!</p>
+                </div>
+                <div class="game-mode-card" data-mode="survival">
+                    <div class="game-mode-icon">💪</div>
+                    <h3>Survival</h3>
+                    <p>Miss three shots and you're out!</p>
+                </div>
+            </div>
+            <button class="button" id="playButton">Play Game</button>
+            <button class="button" id="instructionsButton">Instructions</button>
+            <button class="button" id="tournamentButton">Tournament</button>
+            <button class="button" id="leaderboardButton">Leaderboard</button>
+        </div>
+
+        <div id="chat-container">
+            <div id="chat-messages"></div>
+            <input type="text" id="chat-input" placeholder="Type your message..." maxlength="200">
+        </div>
+
+        <div id="power-meter">
+            <div id="power-fill"></div>
+        </div>
+
+        <div id="powerup-container"></div>
+        <div id="combo-counter">x3 COMBO!</div>
+        <div id="achievements-popup">
+            <div class="achievement-icon">🏆</div>
+            <h3>Achievement Unlocked!</h3>
+            <p>Sharp Shooter</p>
+        </div>
+
+        <div id="score-container" class="game-stat">Score: <span id="score">0</span></div>
+        <div id="timer-container" class="game-stat">Time: <span id="timer">60</span>s</div>
+        <div id="streak-container" class="game-stat">Streak: <span id="streak">0</span></div>
+
+        <div id="game-over" class="game-over">
+            <h2>Game Over!</h2>
+            <p>Final Score: <span id="final-score">0</span></p>
+            <p>Best Streak: <span id="best-streak">0</span></p>
+            <p>Achievements: <span id="achievements-earned">0</span></p>
+            <button class="button" id="play-again">Play Again</button>
+            <button class="button" id="change-mode">Change Mode</button>
+        </div>
+    </div>
+
+    <div id="volume-controls">
+        <button id="mute-toggle">🔊</button>
+        <div class="volume-control">
+            <label for="music-volume">Music</label>
+            <input type="range" id="music-volume" min="0" max="1" step="0.1" value="0.5">
+        </div>
+        <div class="volume-control">
+            <label for="sfx-volume">Sound FX</label>
+            <input type="range" id="sfx-volume" min="0" max="1" step="0.1" value="0.7">
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/scripts/game.js"></script>
+</body>
+</html> 
