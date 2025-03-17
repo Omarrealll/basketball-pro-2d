@@ -27,12 +27,19 @@
                 <p>W - Jump</p>
                 <p>A - Move Left</p>
                 <p>D - Move Right</p>
+                <p>SPACE - Shoot Ball</p>
             </div>
             <div class="controls-section">
                 <h3>Player 2</h3>
                 <p>↑ - Jump</p>
                 <p>← - Move Left</p>
                 <p>→ - Move Right</p>
+            </div>
+            <div class="controls-section">
+                <h3>Mobile Controls</h3>
+                <p>Tap and drag left/right to move</p>
+                <p>Tap and hold to charge shot</p>
+                <p>Release to shoot</p>
             </div>
             <div class="powerups-section">
                 <h3>Power-ups</h3>
@@ -109,16 +116,12 @@
             <p id="achievement-name"></p>
         </div>
 
-        <div id="volume-controls">
-            <button id="mute-toggle">🔊</button>
-            <div class="volume-control">
-                <label for="music-volume">Music</label>
-                <input type="range" id="music-volume" min="0" max="1" step="0.1" value="0.5">
-            </div>
-            <div class="volume-control">
-                <label for="sfx-volume">Sound FX</label>
-                <input type="range" id="sfx-volume" min="0" max="1" step="0.1" value="0.7">
-            </div>
+        <div id="chat-container">
+            <div id="chat-messages"></div>
+            <form id="chat-form">
+                <input type="text" id="chat-input" placeholder="Type a message..." maxlength="100">
+                <button type="submit" id="chat-send">Send</button>
+            </form>
         </div>
     </div>
 

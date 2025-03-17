@@ -351,20 +351,6 @@ class BasketChaosPro {
         this.combo = 0;
         this.maxCombo = 0;
         
-        // Initialize audio
-        AudioManager.init();
-        AudioManager.playMusic('menu');
-        
-        // Enhanced features
-        this.powerupTypes = [
-            { name: 'superJump', icon: '🦘', duration: 5000 },
-            { name: 'giantBall', icon: '🏀', duration: 8000 },
-            { name: 'timeFreeze', icon: '⌛', duration: 3000 },
-            { name: 'antiGravity', icon: '🌠', duration: 4000 },
-            { name: 'multiball', icon: '🎯', duration: 6000 },
-            { name: 'tornado', icon: '🌪️', duration: 4000 }
-        ];
-        
         // Game modes
         this.gameModes = {
             classic: { name: 'Classic', icon: '🏀', description: 'First to 5 points wins!' },
@@ -374,14 +360,54 @@ class BasketChaosPro {
             trickshot: { name: 'Trick Shot', icon: '🎯', description: 'Points multiply with each bounce!' },
             versus: { name: 'Versus', icon: '⚔️', description: 'Battle against another player!' }
         };
-
+        
+        // Initialize audio
+        AudioManager.init();
+        AudioManager.playMusic('menu');
+        
         // Initialize controls
         this.initControls();
+        this.initTouchControls();
         
         // Start game loop
         this.lastTime = 0;
         this.animate = this.animate.bind(this);
         requestAnimationFrame(this.animate);
+        
+        // Initialize UI elements
+        this.initUI();
+    }
+
+    initUI() {
+        // Make sure game UI is hidden initially
+        document.getElementById('game-ui').style.display = 'none';
+        
+        // Make sure modals are hidden initially
+        document.querySelectorAll('.modal').forEach(modal => {
+            modal.style.display = 'none';
+        });
+        
+        // Create game mode cards
+        const gameModeContainer = document.getElementById('game-modes');
+        gameModeContainer.innerHTML = ''; // Clear any existing cards
+        
+        Object.entries(this.gameModes).forEach(([mode, data]) => {
+            const card = document.createElement('div');
+            card.className = 'game-mode-card';
+            card.dataset.mode = mode;
+            card.innerHTML = `
+                <div class="game-mode-icon">${data.icon}</div>
+                <h3>${data.name}</h3>
+                <p>${data.description}</p>
+            `;
+            gameModeContainer.appendChild(card);
+        });
+        
+        // Select first game mode by default
+        const firstCard = document.querySelector('.game-mode-card');
+        if (firstCard) {
+            firstCard.classList.add('selected');
+        }
     }
 
     setupCanvas() {
@@ -400,215 +426,501 @@ class BasketChaosPro {
 
     initControls() {
         // Keyboard controls
-        const keys = {
-            player1: { up: 'w', left: 'a', right: 'd' },
-            player2: { up: 'ArrowUp', left: 'ArrowLeft', right: 'ArrowRight' }
-        };
-        
-        this.controls = {
+        this.keys = {
             player1: { up: false, left: false, right: false },
             player2: { up: false, left: false, right: false }
         };
-
-        document.addEventListener('keydown', (e) => {
+        
+        window.addEventListener('keydown', (e) => {
             this.handleKeyPress(e.key, true);
         });
-
-        document.addEventListener('keyup', (e) => {
+        
+        window.addEventListener('keyup', (e) => {
             this.handleKeyPress(e.key, false);
         });
-
-        // Touch controls for mobile
-        if ('ontouchstart' in window) {
-            this.initTouchControls();
-        }
     }
 
     initTouchControls() {
-        const touchZones = {
-            left: { x: 0, w: this.canvas.width * 0.3 },
-            middle: { x: this.canvas.width * 0.3, w: this.canvas.width * 0.4 },
-            right: { x: this.canvas.width * 0.7, w: this.canvas.width * 0.3 }
-        };
-
-        this.canvas.addEventListener('touchstart', (e) => {
+        // Touch controls for mobile
+        const touchArea = this.canvas;
+        
+        // Variables to track touch positions
+        let touchStartX = 0;
+        let touchStartY = 0;
+        
+        touchArea.addEventListener('touchstart', (e) => {
             e.preventDefault();
             const touch = e.touches[0];
-            const x = touch.clientX - this.canvas.offsetLeft;
+            touchStartX = touch.clientX;
+            touchStartY = touch.clientY;
             
-            if (x < touchZones.left.x + touchZones.left.w) {
-                this.controls.player1.left = true;
-            } else if (x > touchZones.right.x) {
-                this.controls.player1.right = true;
-            } else {
-                this.controls.player1.up = true;
+            // Check if touch is in the bottom half (for shooting)
+            if (touchStartY > this.canvas.height / 2) {
+                this.startShooting();
             }
         });
-
-        this.canvas.addEventListener('touchend', () => {
-            Object.keys(this.controls.player1).forEach(key => {
-                this.controls.player1[key] = false;
-            });
+        
+        touchArea.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const touchX = touch.clientX;
+            
+            // Move player based on touch position relative to start
+            if (touchX < touchStartX - 20) {
+                this.keys.player1.left = true;
+                this.keys.player1.right = false;
+            } else if (touchX > touchStartX + 20) {
+                this.keys.player1.left = false;
+                this.keys.player1.right = true;
+            } else {
+                this.keys.player1.left = false;
+                this.keys.player1.right = false;
+            }
+        });
+        
+        touchArea.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            
+            // Reset movement keys
+            this.keys.player1.left = false;
+            this.keys.player1.right = false;
+            
+            // If was shooting, release the shot
+            if (this.isShooting) {
+                this.shootBall();
+            }
         });
     }
 
     handleKeyPress(key, isDown) {
-        const { player1, player2 } = this.controls;
+        // Player 1 controls (WASD)
+        if (key === 'w' || key === 'W') this.keys.player1.up = isDown;
+        if (key === 'a' || key === 'A') this.keys.player1.left = isDown;
+        if (key === 'd' || key === 'D') this.keys.player1.right = isDown;
         
-        switch(key) {
-            case 'w': player1.up = isDown; break;
-            case 'a': player1.left = isDown; break;
-            case 'd': player1.right = isDown; break;
-            case 'ArrowUp': player2.up = isDown; break;
-            case 'ArrowLeft': player2.left = isDown; break;
-            case 'ArrowRight': player2.right = isDown; break;
-        }
-    }
-
-    spawnPowerup() {
-        if (Math.random() < 0.02 && this.powerups.length < 3) { // 2% chance each frame
-            const type = this.powerupTypes[Math.floor(Math.random() * this.powerupTypes.length)];
-            const x = Math.random() * (this.canvas.width - 40) + 20;
-            const y = Math.random() * (this.canvas.height / 2) + 20;
-            
-            this.powerups.push({
-                type,
-                x,
-                y,
-                width: 30 * this.scale,
-                height: 30 * this.scale,
-                collected: false,
-                spawnTime: Date.now()
-            });
-        }
-    }
-
-    applyPowerup(player, powerup) {
-        this.sounds.powerup.play();
-        const duration = powerup.type.duration;
+        // Player 2 controls (Arrow keys)
+        if (key === 'ArrowUp') this.keys.player2.up = isDown;
+        if (key === 'ArrowLeft') this.keys.player2.left = isDown;
+        if (key === 'ArrowRight') this.keys.player2.right = isDown;
         
-        switch(powerup.type.name) {
-            case 'superJump':
-                player.jumpForce *= 1.5;
-                setTimeout(() => { player.jumpForce /= 1.5; }, duration);
-                break;
-            case 'giantBall':
-                this.ball.radius *= 2;
-                setTimeout(() => { this.ball.radius /= 2; }, duration);
-                break;
-            case 'timeFreeze':
-                const oldGravity = this.gravity;
-                this.gravity = 0.1;
-                setTimeout(() => { this.gravity = oldGravity; }, duration);
-                break;
-            case 'antiGravity':
-                this.gravity *= -1;
-                setTimeout(() => { this.gravity *= -1; }, duration);
-                break;
-            case 'multiball':
-                this.spawnExtraBalls();
-                break;
-            case 'tornado':
-                this.startTornado();
-                break;
+        // Space bar for shooting
+        if (key === ' ' && isDown) {
+            this.startShooting();
+        } else if (key === ' ' && !isDown && this.isShooting) {
+            this.shootBall();
         }
     }
 
-    spawnExtraBalls() {
-        for (let i = 0; i < 2; i++) {
-            const extraBall = { ...this.ball };
-            extraBall.x += (Math.random() - 0.5) * 50;
-            extraBall.y -= Math.random() * 50;
-            this.balls.push(extraBall);
+    startShooting() {
+        if (this.gameState !== 'playing' || !this.ball || this.ball.isInAir) return;
+        
+        this.isShooting = true;
+        this.shootPower = 0;
+        this.maxShootPower = 20;
+        this.shootPowerIncrement = 0.5;
+        
+        // Show power meter
+        const powerMeter = document.querySelector('.power-meter');
+        if (!powerMeter) {
+            const meter = document.createElement('div');
+            meter.className = 'power-meter';
+            meter.innerHTML = '<div class="power-fill"></div>';
+            document.getElementById('game-container').appendChild(meter);
         }
-        setTimeout(() => {
-            this.balls = [this.ball];
-        }, 6000);
     }
 
-    startTornado() {
-        this.tornado = {
-            x: this.canvas.width / 2,
-            y: this.canvas.height / 2,
-            radius: 100,
-            strength: 2,
-            duration: 4000,
-            startTime: Date.now()
+    shootBall() {
+        if (!this.isShooting || !this.ball || this.ball.isInAir) return;
+        
+        // Calculate shooting angle and power
+        const power = this.shootPower;
+        const angle = -Math.PI / 4; // 45 degrees upward
+        
+        // Apply force to the ball
+        this.ball.vx = Math.cos(angle) * power;
+        this.ball.vy = Math.sin(angle) * power;
+        this.ball.isInAir = true;
+        
+        // Play sound
+        AudioManager.playSound('bounce');
+        
+        // Reset shooting state
+        this.isShooting = false;
+        
+        // Hide power meter
+        const powerMeter = document.querySelector('.power-meter');
+        if (powerMeter) {
+            powerMeter.remove();
+        }
+    }
+
+    startGame(mode) {
+        this.currentMode = mode;
+        this.gameState = 'playing';
+        this.score = [0, 0];
+        this.combo = 0;
+        this.maxCombo = 0;
+        this.powerups = [];
+        this.effects = [];
+        
+        // Initialize players
+        this.players = [
+            this.createPlayer(1, this.canvas.width * 0.25),
+            this.createPlayer(2, this.canvas.width * 0.75)
+        ];
+        
+        // Initialize ball
+        this.ball = this.createBall();
+        
+        // Start game music
+        AudioManager.playMusic('game');
+        
+        // Hide menu
+        document.getElementById('menu').style.display = 'none';
+        
+        // Show game UI
+        document.getElementById('game-ui').style.display = 'flex';
+        
+        // Reset UI elements
+        document.getElementById('score-p1').textContent = '0';
+        document.getElementById('score-p2').textContent = '0';
+        document.getElementById('streak').textContent = '0';
+        document.getElementById('combo-counter').style.display = 'none';
+        
+        // Set up timer if needed
+        if (mode === 'timeAttack') {
+            this.timeRemaining = 60;
+            document.getElementById('timer-container').style.display = 'block';
+            document.getElementById('timer').textContent = this.timeRemaining;
+            this.timerInterval = setInterval(() => {
+                this.timeRemaining--;
+                document.getElementById('timer').textContent = this.timeRemaining;
+                
+                if (this.timeRemaining <= 0) {
+                    clearInterval(this.timerInterval);
+                    this.endGame();
+                }
+            }, 1000);
+        } else {
+            document.getElementById('timer-container').style.display = 'none';
+        }
+    }
+
+    createPlayer(id, x) {
+        return {
+            id,
+            x,
+            y: this.canvas.height - 150,
+            width: 40 * this.scale,
+            height: 60 * this.scale,
+            velocityX: 0,
+            velocityY: 0,
+            speed: 5,
+            jumpForce: 15,
+            isJumping: false,
+            color: id === 1 ? '#4CAF50' : '#2196F3'
         };
     }
 
-    updateTornado() {
-        if (!this.tornado) return;
-        
-        const elapsed = Date.now() - this.tornado.startTime;
-        if (elapsed > this.tornado.duration) {
-            this.tornado = null;
-            return;
-        }
-
-        // Move all objects towards tornado center
-        [this.ball, ...this.players].forEach(obj => {
-            const dx = this.tornado.x - obj.x;
-            const dy = this.tornado.y - obj.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            
-            if (dist < this.tornado.radius) {
-                const force = (1 - dist / this.tornado.radius) * this.tornado.strength;
-                obj.velocityX += (dx / dist) * force;
-                obj.velocityY += (dy / dist) * force;
-            }
-        });
+    createBall() {
+        return {
+            x: this.canvas.width / 2,
+            y: this.canvas.height / 2,
+            radius: 15 * this.scale,
+            velocityX: 0,
+            velocityY: 0,
+            bounces: 0,
+            lastTouchedBy: null
+        };
     }
 
     animate(currentTime) {
-        const deltaTime = currentTime - this.lastTime;
+        // Calculate delta time
+        if (!this.lastTime) this.lastTime = currentTime;
+        const deltaTime = (currentTime - this.lastTime) / 1000;
         this.lastTime = currentTime;
-
+        
         // Clear canvas
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-
-        switch(this.gameState) {
-            case 'menu':
-                this.drawMenu();
-                break;
-            case 'playing':
-                this.update(deltaTime);
-                this.draw();
-                break;
-            case 'gameOver':
-                this.drawGameOver();
-                break;
+        
+        // Update game state
+        if (this.gameState === 'playing') {
+            this.update(deltaTime);
         }
-
+        
+        // Draw game
+        this.draw();
+        
+        // Update shooting power if charging
+        if (this.isShooting && this.shootPower < this.maxShootPower) {
+            this.shootPower += this.shootPowerIncrement;
+            
+            // Update power meter
+            const powerFill = document.querySelector('.power-fill');
+            if (powerFill) {
+                powerFill.style.width = `${(this.shootPower / this.maxShootPower) * 100}%`;
+            }
+            
+            // If reached max power, shoot automatically
+            if (this.shootPower >= this.maxShootPower) {
+                this.shootBall();
+            }
+        }
+        
+        // Request next frame
         requestAnimationFrame(this.animate);
     }
 
     update(deltaTime) {
-        // Update game physics
-        this.updatePlayers(deltaTime);
-        this.updateBall(deltaTime);
-        this.updatePowerups();
-        this.updateTornado();
-        this.checkCollisions();
-        this.checkScore();
+        // Update players
+        this.players.forEach(player => {
+            // Apply gravity
+            player.velocityY += this.gravity;
+            
+            // Apply wind force
+            player.velocityX += this.windForce;
+            
+            // Apply movement based on controls
+            const controls = this.keys[`player${player.id}`];
+            
+            if (controls.left) {
+                player.velocityX = -player.speed;
+            } else if (controls.right) {
+                player.velocityX = player.speed;
+            } else {
+                player.velocityX *= 0.8; // Friction
+            }
+            
+            // Jump
+            if (controls.up && !player.isJumping) {
+                player.velocityY = -player.jumpForce;
+                player.isJumping = true;
+                AudioManager.playSound('bounce');
+            }
+            
+            // Update position
+            player.x += player.velocityX;
+            player.y += player.velocityY;
+            
+            // Boundary checks
+            if (player.x < 0) player.x = 0;
+            if (player.x + player.width > this.canvas.width) player.x = this.canvas.width - player.width;
+            
+            // Floor collision
+            if (player.y + player.height > this.canvas.height) {
+                player.y = this.canvas.height - player.height;
+                player.velocityY = 0;
+                player.isJumping = false;
+            }
+        });
         
-        // Random events in chaos mode
-        if (this.currentMode === 'chaos' && Math.random() < 0.005) {
-            this.triggerRandomEvent();
+        // Update ball
+        if (this.ball) {
+            // Apply gravity
+            this.ball.velocityY += this.gravity;
+            
+            // Apply wind
+            this.ball.velocityX += this.windForce;
+            
+            // Update position
+            this.ball.x += this.ball.velocityX;
+            this.ball.y += this.ball.velocityY;
+            
+            // Boundary checks
+            if (this.ball.x - this.ball.radius < 0) {
+                this.ball.x = this.ball.radius;
+                this.ball.velocityX *= -0.8; // Bounce with energy loss
+                this.ball.bounces++;
+                AudioManager.playSound('bounce');
+            }
+            
+            if (this.ball.x + this.ball.radius > this.canvas.width) {
+                this.ball.x = this.canvas.width - this.ball.radius;
+                this.ball.velocityX *= -0.8;
+                this.ball.bounces++;
+                AudioManager.playSound('bounce');
+            }
+            
+            // Floor collision
+            if (this.ball.y + this.ball.radius > this.canvas.height) {
+                this.ball.y = this.canvas.height - this.ball.radius;
+                this.ball.velocityY *= -0.8;
+                this.ball.bounces++;
+                AudioManager.playSound('bounce');
+                
+                // If ball is moving very slowly after bounce, reset it
+                if (Math.abs(this.ball.velocityY) < 2) {
+                    this.resetBall();
+                }
+            }
+            
+            // Check for basket collision
+            this.checkBasketCollision();
+            
+            // Check for player collision
+            this.players.forEach(player => {
+                this.checkPlayerBallCollision(player);
+            });
+        }
+        
+        // Spawn powerups randomly
+        if (Math.random() < 0.005) { // 0.5% chance per frame
+            this.spawnPowerup();
+        }
+        
+        // Check for powerup collection
+        this.checkPowerupCollection();
+        
+        // Update game mode specific logic
+        this.updateGameMode(deltaTime);
+    }
+
+    checkBasketCollision() {
+        // Simple basket implementation - can be enhanced
+        const basketX = this.canvas.width * 0.75;
+        const basketY = this.canvas.height * 0.4;
+        const basketWidth = 100 * this.scale;
+        const basketHeight = 10 * this.scale;
+        
+        // Check if ball is above the basket and falling down
+        if (this.ball.velocityY > 0 && 
+            this.ball.y + this.ball.radius > basketY && 
+            this.ball.y - this.ball.radius < basketY + basketHeight &&
+            this.ball.x > basketX && 
+            this.ball.x < basketX + basketWidth) {
+            
+            // Score!
+            this.score[this.ball.lastTouchedBy ? this.ball.lastTouchedBy - 1 : 0]++;
+            
+            // Update score display
+            document.getElementById(`score-p${this.ball.lastTouchedBy || 1}`).textContent = 
+                this.score[this.ball.lastTouchedBy ? this.ball.lastTouchedBy - 1 : 0];
+            
+            // Increment combo
+            this.combo++;
+            if (this.combo > this.maxCombo) {
+                this.maxCombo = this.combo;
+            }
+            
+            // Update streak display
+            document.getElementById('streak').textContent = this.combo;
+            
+            // Show combo counter if combo > 1
+            if (this.combo > 1) {
+                const comboCounter = document.getElementById('combo-counter');
+                comboCounter.textContent = `x${this.combo} COMBO!`;
+                comboCounter.style.display = 'block';
+                
+                // Hide after 2 seconds
+                setTimeout(() => {
+                    comboCounter.style.display = 'none';
+                }, 2000);
+            }
+            
+            // Play sound
+            AudioManager.playSound('score');
+            
+            // Reset ball
+            this.resetBall();
+            
+            // Check for game end in classic mode
+            if (this.currentMode === 'classic' && 
+                (this.score[0] >= this.roundsToWin || this.score[1] >= this.roundsToWin)) {
+                this.endGame();
+            }
+        }
+    }
+
+    checkPlayerBallCollision(player) {
+        // Simple rectangular collision
+        if (this.ball.x + this.ball.radius > player.x && 
+            this.ball.x - this.ball.radius < player.x + player.width &&
+            this.ball.y + this.ball.radius > player.y && 
+            this.ball.y - this.ball.radius < player.y + player.height) {
+            
+            // Calculate bounce direction
+            const centerX = player.x + player.width / 2;
+            const centerY = player.y + player.height / 2;
+            const dx = this.ball.x - centerX;
+            const dy = this.ball.y - centerY;
+            const angle = Math.atan2(dy, dx);
+            
+            // Apply bounce force
+            const speed = Math.sqrt(this.ball.velocityX * this.ball.velocityX + this.ball.velocityY * this.ball.velocityY);
+            this.ball.velocityX = Math.cos(angle) * speed * 1.2; // Slightly increase speed
+            this.ball.velocityY = Math.sin(angle) * speed * 1.2;
+            
+            // Record which player last touched the ball
+            this.ball.lastTouchedBy = player.id;
+            
+            // Play sound
+            AudioManager.playSound('bounce');
+        }
+    }
+
+    resetBall() {
+        this.ball.x = this.canvas.width / 2;
+        this.ball.y = this.canvas.height / 2;
+        this.ball.velocityX = 0;
+        this.ball.velocityY = 0;
+        this.ball.bounces = 0;
+        this.ball.isInAir = false;
+    }
+
+    endGame() {
+        this.gameState = 'gameOver';
+        
+        // Stop timer if it exists
+        if (this.timerInterval) {
+            clearInterval(this.timerInterval);
+        }
+        
+        // Update game over screen
+        document.getElementById('final-score').textContent = Math.max(...this.score);
+        document.getElementById('best-streak').textContent = this.maxCombo;
+        document.getElementById('total-bounces').textContent = this.ball ? this.ball.bounces : 0;
+        document.getElementById('powerups-collected').textContent = this.powerupsCollected || 0;
+        
+        // Show game over screen
+        document.getElementById('game-over').style.display = 'block';
+        
+        // Play game over sound
+        AudioManager.playMusic('menu');
+        AudioManager.playSound('gameOver');
+    }
+
+    updateGameMode(deltaTime) {
+        switch (this.currentMode) {
+            case 'chaos':
+                // Random events every 5 seconds
+                if (!this.lastEventTime || Date.now() - this.lastEventTime > 5000) {
+                    this.triggerRandomEvent();
+                    this.lastEventTime = Date.now();
+                }
+                break;
+                
+            case 'survival':
+                // Game ends after 3 misses
+                // This would need to track misses
+                break;
+                
+            case 'trickshot':
+                // Points multiply with each bounce
+                break;
         }
     }
 
     triggerRandomEvent() {
         const events = [
-            () => { this.gravity *= -1; setTimeout(() => { this.gravity *= -1; }, 3000); },
-            () => { this.windForce = (Math.random() - 0.5) * 2; setTimeout(() => { this.windForce = 0; }, 4000); },
-            () => { this.startTornado(); },
-            () => { this.ball.radius *= Math.random() + 0.5; setTimeout(() => { this.ball.radius = 15; }, 5000); },
-            () => { this.players.forEach(p => p.jumpForce *= 1.5); setTimeout(() => { this.players.forEach(p => p.jumpForce /= 1.5); }, 3000); }
+            () => { this.gravity *= -1; setTimeout(() => { this.gravity *= -1; }, 3000); }, // Reverse gravity
+            () => { this.windForce = (Math.random() - 0.5) * 2; setTimeout(() => { this.windForce = 0; }, 4000); }, // Random wind
+            () => { this.ball.radius *= 2; setTimeout(() => { this.ball.radius /= 2; }, 5000); }, // Giant ball
+            () => { this.spawnPowerup(); this.spawnPowerup(); } // Multiple powerups
         ];
-
-        const randomEvent = events[Math.floor(Math.random() * events.length)];
-        randomEvent();
+        
+        // Choose a random event
+        const event = events[Math.floor(Math.random() * events.length)];
+        event();
     }
 
     draw() {
@@ -650,10 +962,10 @@ class BasketChaosPro {
         
         this.ctx.save();
         this.ctx.globalAlpha = alpha;
-        this.ctx.beginPath();
+            this.ctx.beginPath();
         this.ctx.arc(this.tornado.x, this.tornado.y, this.tornado.radius, 0, Math.PI * 2);
         this.ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-        this.ctx.fill();
+            this.ctx.fill();
         
         // Draw swirl effect
         for (let i = 0; i < 5; i++) {
@@ -670,61 +982,209 @@ class BasketChaosPro {
         this.ctx.restore();
     }
 
-    startGame(mode) {
-        this.currentMode = mode;
-        this.gameState = 'playing';
-        this.score = [0, 0];
-        this.combo = 0;
-        this.maxCombo = 0;
-        this.powerups = [];
-        this.effects = [];
+    drawGame() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
         
-        // Initialize players
-        this.players = [
-            this.createPlayer(1, this.canvas.width * 0.25),
-            this.createPlayer(2, this.canvas.width * 0.75)
-        ];
+        // Draw other players
+        Object.entries(gameState.players).forEach(([id, player]) => {
+            if (id !== playerId) {
+                ctx.fillStyle = '#ff6b6b';
+                ctx.fillRect(player.x, player.y, 40, 80);
+            }
+        });
         
-        // Initialize ball
-        this.ball = this.createBall();
+        // Draw power-ups
+        gameState.powerups.forEach(powerup => {
+            const type = POWERUP_TYPES[powerup.type];
+            ctx.beginPath();
+            ctx.arc(powerup.x, powerup.y, 15, 0, Math.PI * 2);
+            ctx.fillStyle = type.color;
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.font = '16px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(type.symbol, powerup.x, powerup.y + 6);
+        });
         
-        // Start game music
-        AudioManager.playMusic('game');
+        // Draw basket with power-up effects
+        const originalMoveSpeed = basket.moveSpeed;
+        if (activePowerups.has('SLOWER_BASKET')) {
+            basket.moveSpeed *= 0.5;
+        }
+        updateBasket();
+        basket.moveSpeed = originalMoveSpeed;
         
-        // Hide menu
-        document.getElementById('menu').style.display = 'none';
+        // Draw ball with power-up effects
+        const originalRadius = ball.radius;
+        if (activePowerups.has('BIGGER_BALL')) {
+            ball.radius *= 1.5;
+        }
         
-        // Show game UI
-        document.getElementById('game-ui').style.display = 'block';
-        document.getElementById('chat-container').style.display = 'block';
+        // Draw ball trail
+        ball.trail.forEach((pos, i) => {
+            const alpha = i / ball.trail.length;
+            ctx.fillStyle = `rgba(255, 107, 107, ${alpha * 0.3})`;
+            ctx.beginPath();
+            ctx.arc(pos.x, pos.y, ball.radius * alpha, 0, Math.PI * 2);
+            ctx.fill();
+        });
+        
+        // Draw ball
+        ctx.save();
+        ctx.translate(ball.x, ball.y);
+        ctx.rotate(ball.rotation);
+        ctx.beginPath();
+        ctx.arc(0, 0, ball.radius, 0, Math.PI * 2);
+        ctx.fillStyle = ball.color;
+        ctx.fill();
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-ball.radius, 0);
+        ctx.lineTo(ball.radius, 0);
+        ctx.stroke();
+        ctx.restore();
+        
+        ball.radius = originalRadius;
+        
+        // Draw basket
+        ctx.fillStyle = basket.color;
+        ctx.fillRect(basket.x, basket.y, basket.width, basket.rimWidth);
+        ctx.fillRect(basket.x, basket.y, basket.rimWidth, basket.height);
+        
+        // Draw net
+        ctx.beginPath();
+        ctx.moveTo(basket.netPoints[0].x, basket.netPoints[0].y);
+        basket.netPoints.forEach(point => {
+            ctx.lineTo(point.x, point.y);
+        });
+        ctx.strokeStyle = '#ffffff';
+        ctx.stroke();
+        
+        // Draw aim line
+        if (isPoweringUp) {
+            ctx.beginPath();
+            ctx.moveTo(ball.x, ball.y);
+            ctx.lineTo(mouseX, mouseY);
+            ctx.strokeStyle = `rgba(255, 255, 255, ${power/100})`;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            
+            // Draw power meter
+            ctx.fillStyle = `hsl(${120 * (1 - power/100)}, 100%, 50%)`;
+            ctx.fillRect(10, 10, power * 2, 20);
+            ctx.strokeStyle = '#fff';
+            ctx.strokeRect(10, 10, 200, 20);
+        }
+        
+        // Update UI
+        document.getElementById('score').textContent = score;
+        document.getElementById('time').textContent = Math.ceil(gameTime);
     }
 
-    createPlayer(id, x) {
-        return {
-            id,
-            x,
-            y: this.canvas.height - 150,
-            width: 40 * this.scale,
-            height: 60 * this.scale,
-            velocityX: 0,
-            velocityY: 0,
-            speed: 5,
-            jumpForce: 15,
-            isJumping: false,
-            color: id === 1 ? '#4CAF50' : '#2196F3'
-        };
+    updateBall() {
+        if (ball.isShot) {
+            // Store trail
+            ball.trail.push({x: ball.x, y: ball.y});
+            if (ball.trail.length > 10) ball.trail.shift();
+            
+            // Apply physics with power-ups
+            const gravityMultiplier = activePowerups.has('PERFECT_SHOT') ? 0.3 : 1;
+            ball.velocityY += gravity * gravityMultiplier;
+            
+            const resistanceMultiplier = activePowerups.has('PERFECT_SHOT') ? 0.995 : airResistance;
+            ball.velocityX *= resistanceMultiplier;
+            ball.velocityY *= resistanceMultiplier;
+            
+            ball.x += ball.velocityX;
+            ball.y += ball.velocityY;
+            
+            ball.rotation += ball.velocityX * 0.1;
+            
+            handleCollisions();
+            
+            // Send ball state to server
+            ws.send(JSON.stringify({
+                type: 'game_update',
+                ballState: {
+                    x: ball.x,
+                    y: ball.y,
+                    velocityX: ball.velocityX,
+                    velocityY: ball.velocityY,
+                    rotation: ball.rotation
+                }
+            }));
+        }
     }
 
-    createBall() {
-        return {
-            x: this.canvas.width / 2,
-            y: this.canvas.height / 2,
-            radius: 15 * this.scale,
-            velocityX: 0,
-            velocityY: 0,
-            bounces: 0,
-            lastTouchedBy: null
-        };
+    handleCollisions() {
+        // Floor collision
+        if (ball.y + ball.radius > canvas.height) {
+            ball.y = canvas.height - ball.radius;
+            ball.velocityY = -ball.velocityY * bounce;
+            playSound('bounce');
+        }
+        
+        // Wall collisions
+        if (ball.x + ball.radius > canvas.width || ball.x - ball.radius < 0) {
+            ball.velocityX = -ball.velocityX * bounce;
+            playSound('bounce');
+        }
+        
+        // Basket collision
+        if (checkBasketCollision()) {
+            let points = 2;
+            if (activePowerups.has('DOUBLE_POINTS')) points *= 2;
+            if (Math.abs(ball.velocityY) < 5) points++; // Swish bonus
+            
+            score += points;
+            ws.send(JSON.stringify({
+                type: 'score_update',
+                score: score
+            }));
+            
+            playSound('score');
+            resetBall();
+        }
+        
+        // Power-up collisions
+        gameState.powerups.forEach(powerup => {
+            const dx = ball.x - powerup.x;
+            const dy = ball.y - powerup.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance < ball.radius + 15) {
+                ws.send(JSON.stringify({
+                    type: 'powerup_collected',
+                    powerupId: powerup.id,
+                    powerupType: powerup.type
+                }));
+            }
+        });
+    }
+
+    updateBasket() {
+        // Move basket
+        basket.y += basket.moveSpeed * basket.direction;
+        
+        // Reverse direction at boundaries
+        if (basket.y < 100 || basket.y > 400) {
+            basket.direction *= -1;
+        }
+        
+        // Update net physics
+        basket.netPoints.forEach((point, i) => {
+            const targetY = i === 0 || i === basket.netPoints.length - 1 
+                ? point.baseY 
+                : (basket.netPoints[i-1].y + basket.netPoints[i+1].y) / 2;
+            
+            point.velocity += (targetY - point.y) * 0.1;
+            point.velocity *= 0.8;
+            point.y += point.velocity;
+            
+            point.x = basket.x + i * (basket.width / 9);
+            point.baseY = basket.y + basket.height;
+        });
     }
 }
 
@@ -1509,4 +1969,346 @@ const newStyles = `
     }
 `;
 
-document.head.appendChild(document.createElement('style')).textContent = newStyles; 
+document.head.appendChild(document.createElement('style')).textContent = newStyles;
+
+// Initialize chat system
+function initChat() {
+    const chatForm = document.getElementById('chat-form');
+    const chatInput = document.getElementById('chat-input');
+    const chatMessages = document.getElementById('chat-messages');
+    
+    // Show chat container when game starts
+    document.getElementById('chat-container').style.display = 'block';
+    
+    // Handle chat form submission
+    chatForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const message = chatInput.value.trim();
+        
+        if (message) {
+            // Send message to server
+            ws.send(JSON.stringify({
+                type: 'chat_message',
+                message: message
+            }));
+            
+            // Clear input
+            chatInput.value = '';
+        }
+    });
+    
+    // Handle incoming chat messages
+    ws.addEventListener('message', (event) => {
+        const data = JSON.parse(event.data);
+        
+        if (data.type === 'chat_message') {
+            // Add message to chat
+            const messageElement = document.createElement('div');
+            messageElement.className = 'chat-message';
+            messageElement.innerHTML = `<strong>${data.sender}:</strong> ${data.message}`;
+            chatMessages.appendChild(messageElement);
+            
+            // Auto-scroll to bottom
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+    });
+}
+
+// Update the BasketChaosPro class animate method
+BasketChaosPro.prototype.animate = function(currentTime) {
+    // Calculate delta time
+    if (!this.lastTime) this.lastTime = currentTime;
+    const deltaTime = (currentTime - this.lastTime) / 1000;
+    this.lastTime = currentTime;
+    
+    // Clear canvas
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    
+    // Update game state
+    if (this.gameState === 'playing') {
+        this.update(deltaTime);
+    }
+    
+    // Draw game
+    this.draw();
+    
+    // Update shooting power if charging
+    if (this.isShooting && this.shootPower < this.maxShootPower) {
+        this.shootPower += this.shootPowerIncrement;
+        
+        // Update power meter
+        const powerFill = document.querySelector('.power-fill');
+        if (powerFill) {
+            powerFill.style.width = `${(this.shootPower / this.maxShootPower) * 100}%`;
+        }
+        
+        // If reached max power, shoot automatically
+        if (this.shootPower >= this.maxShootPower) {
+            this.shootBall();
+        }
+    }
+    
+    // Request next frame
+    requestAnimationFrame(this.animate);
+};
+
+// Update the BasketChaosPro class update method
+BasketChaosPro.prototype.update = function(deltaTime) {
+    // Update players
+    this.players.forEach(player => {
+        // Apply gravity
+        player.velocityY += this.gravity;
+        
+        // Apply wind force
+        player.velocityX += this.windForce;
+        
+        // Apply movement based on controls
+        const controls = this.keys[`player${player.id}`];
+        
+        if (controls.left) {
+            player.velocityX = -player.speed;
+        } else if (controls.right) {
+            player.velocityX = player.speed;
+        } else {
+            player.velocityX *= 0.8; // Friction
+        }
+        
+        // Jump
+        if (controls.up && !player.isJumping) {
+            player.velocityY = -player.jumpForce;
+            player.isJumping = true;
+            AudioManager.playSound('bounce');
+        }
+        
+        // Update position
+        player.x += player.velocityX;
+        player.y += player.velocityY;
+        
+        // Boundary checks
+        if (player.x < 0) player.x = 0;
+        if (player.x + player.width > this.canvas.width) player.x = this.canvas.width - player.width;
+        
+        // Floor collision
+        if (player.y + player.height > this.canvas.height) {
+            player.y = this.canvas.height - player.height;
+            player.velocityY = 0;
+            player.isJumping = false;
+        }
+    });
+    
+    // Update ball
+    if (this.ball) {
+        // Apply gravity
+        this.ball.velocityY += this.gravity;
+        
+        // Apply wind
+        this.ball.velocityX += this.windForce;
+        
+        // Update position
+        this.ball.x += this.ball.velocityX;
+        this.ball.y += this.ball.velocityY;
+        
+        // Boundary checks
+        if (this.ball.x - this.ball.radius < 0) {
+            this.ball.x = this.ball.radius;
+            this.ball.velocityX *= -0.8; // Bounce with energy loss
+            this.ball.bounces++;
+            AudioManager.playSound('bounce');
+        }
+        
+        if (this.ball.x + this.ball.radius > this.canvas.width) {
+            this.ball.x = this.canvas.width - this.ball.radius;
+            this.ball.velocityX *= -0.8;
+            this.ball.bounces++;
+            AudioManager.playSound('bounce');
+        }
+        
+        // Floor collision
+        if (this.ball.y + this.ball.radius > this.canvas.height) {
+            this.ball.y = this.canvas.height - this.ball.radius;
+            this.ball.velocityY *= -0.8;
+            this.ball.bounces++;
+            AudioManager.playSound('bounce');
+            
+            // If ball is moving very slowly after bounce, reset it
+            if (Math.abs(this.ball.velocityY) < 2) {
+                this.resetBall();
+            }
+        }
+        
+        // Check for basket collision
+        this.checkBasketCollision();
+        
+        // Check for player collision
+        this.players.forEach(player => {
+            this.checkPlayerBallCollision(player);
+        });
+    }
+    
+    // Spawn powerups randomly
+    if (Math.random() < 0.005) { // 0.5% chance per frame
+        this.spawnPowerup();
+    }
+    
+    // Check for powerup collection
+    this.checkPowerupCollection();
+    
+    // Update game mode specific logic
+    this.updateGameMode(deltaTime);
+};
+
+// Add a method to check for basket collision
+BasketChaosPro.prototype.checkBasketCollision = function() {
+    // Simple basket implementation - can be enhanced
+    const basketX = this.canvas.width * 0.75;
+    const basketY = this.canvas.height * 0.4;
+    const basketWidth = 100 * this.scale;
+    const basketHeight = 10 * this.scale;
+    
+    // Check if ball is above the basket and falling down
+    if (this.ball.velocityY > 0 && 
+        this.ball.y + this.ball.radius > basketY && 
+        this.ball.y - this.ball.radius < basketY + basketHeight &&
+        this.ball.x > basketX && 
+        this.ball.x < basketX + basketWidth) {
+        
+        // Score!
+        this.score[this.ball.lastTouchedBy ? this.ball.lastTouchedBy - 1 : 0]++;
+        
+        // Update score display
+        document.getElementById(`score-p${this.ball.lastTouchedBy || 1}`).textContent = 
+            this.score[this.ball.lastTouchedBy ? this.ball.lastTouchedBy - 1 : 0];
+        
+        // Increment combo
+        this.combo++;
+        if (this.combo > this.maxCombo) {
+            this.maxCombo = this.combo;
+        }
+        
+        // Update streak display
+        document.getElementById('streak').textContent = this.combo;
+        
+        // Show combo counter if combo > 1
+        if (this.combo > 1) {
+            const comboCounter = document.getElementById('combo-counter');
+            comboCounter.textContent = `x${this.combo} COMBO!`;
+            comboCounter.style.display = 'block';
+            
+            // Hide after 2 seconds
+            setTimeout(() => {
+                comboCounter.style.display = 'none';
+            }, 2000);
+        }
+        
+        // Play sound
+        AudioManager.playSound('score');
+        
+        // Reset ball
+        this.resetBall();
+        
+        // Check for game end in classic mode
+        if (this.currentMode === 'classic' && 
+            (this.score[0] >= this.roundsToWin || this.score[1] >= this.roundsToWin)) {
+            this.endGame();
+        }
+    }
+};
+
+// Add a method to check for player-ball collision
+BasketChaosPro.prototype.checkPlayerBallCollision = function(player) {
+    // Simple rectangular collision
+    if (this.ball.x + this.ball.radius > player.x && 
+        this.ball.x - this.ball.radius < player.x + player.width &&
+        this.ball.y + this.ball.radius > player.y && 
+        this.ball.y - this.ball.radius < player.y + player.height) {
+        
+        // Calculate bounce direction
+        const centerX = player.x + player.width / 2;
+        const centerY = player.y + player.height / 2;
+        const dx = this.ball.x - centerX;
+        const dy = this.ball.y - centerY;
+        const angle = Math.atan2(dy, dx);
+        
+        // Apply bounce force
+        const speed = Math.sqrt(this.ball.velocityX * this.ball.velocityX + this.ball.velocityY * this.ball.velocityY);
+        this.ball.velocityX = Math.cos(angle) * speed * 1.2; // Slightly increase speed
+        this.ball.velocityY = Math.sin(angle) * speed * 1.2;
+        
+        // Record which player last touched the ball
+        this.ball.lastTouchedBy = player.id;
+        
+        // Play sound
+        AudioManager.playSound('bounce');
+    }
+};
+
+// Add a method to reset the ball
+BasketChaosPro.prototype.resetBall = function() {
+    this.ball.x = this.canvas.width / 2;
+    this.ball.y = this.canvas.height / 2;
+    this.ball.velocityX = 0;
+    this.ball.velocityY = 0;
+    this.ball.bounces = 0;
+    this.ball.isInAir = false;
+};
+
+// Add a method to end the game
+BasketChaosPro.prototype.endGame = function() {
+    this.gameState = 'gameOver';
+    
+    // Stop timer if it exists
+    if (this.timerInterval) {
+        clearInterval(this.timerInterval);
+    }
+    
+    // Update game over screen
+    document.getElementById('final-score').textContent = Math.max(...this.score);
+    document.getElementById('best-streak').textContent = this.maxCombo;
+    document.getElementById('total-bounces').textContent = this.ball ? this.ball.bounces : 0;
+    document.getElementById('powerups-collected').textContent = this.powerupsCollected || 0;
+    
+    // Show game over screen
+    document.getElementById('game-over').style.display = 'block';
+    
+    // Play game over sound
+    AudioManager.playMusic('menu');
+    AudioManager.playSound('gameOver');
+};
+
+// Add a method to update game mode specific logic
+BasketChaosPro.prototype.updateGameMode = function(deltaTime) {
+    switch (this.currentMode) {
+        case 'chaos':
+            // Random events every 5 seconds
+            if (!this.lastEventTime || Date.now() - this.lastEventTime > 5000) {
+                this.triggerRandomEvent();
+                this.lastEventTime = Date.now();
+            }
+            break;
+            
+        case 'survival':
+            // Game ends after 3 misses
+            // This would need to track misses
+            break;
+            
+        case 'trickshot':
+            // Points multiply with each bounce
+            break;
+    }
+};
+
+// Add a method to trigger random events for chaos mode
+BasketChaosPro.prototype.triggerRandomEvent = function() {
+    const events = [
+        () => { this.gravity *= -1; setTimeout(() => { this.gravity *= -1; }, 3000); }, // Reverse gravity
+        () => { this.windForce = (Math.random() - 0.5) * 2; setTimeout(() => { this.windForce = 0; }, 4000); }, // Random wind
+        () => { this.ball.radius *= 2; setTimeout(() => { this.ball.radius /= 2; }, 5000); }, // Giant ball
+        () => { this.spawnPowerup(); this.spawnPowerup(); } // Multiple powerups
+    ];
+    
+    // Choose a random event
+    const event = events[Math.floor(Math.random() * events.length)];
+    event();
+};
+
+// ... existing code ... 

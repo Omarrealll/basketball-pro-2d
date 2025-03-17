@@ -385,30 +385,78 @@ body {
     #menu {
         width: 90%;
         padding: 20px;
+        min-width: auto;
     }
-
+    
+    #menu h1 {
+        font-size: 28px;
+        margin-bottom: 20px;
+    }
+    
     #game-modes {
-        grid-template-columns: 1fr;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
     }
-
+    
+    .game-mode-card {
+        padding: 10px;
+    }
+    
+    .game-mode-icon {
+        font-size: 24px;
+    }
+    
+    .game-mode-card h3 {
+        font-size: 14px;
+    }
+    
+    .game-mode-card p {
+        font-size: 12px;
+    }
+    
     .button {
-        width: 100%;
-        margin: 5px 0;
+        padding: 10px 15px;
+        font-size: 14px;
+        margin: 5px;
     }
-
+    
+    #game-ui {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 5px;
+    }
+    
     .game-stat {
-        font-size: 16px;
-        padding: 8px 15px;
+        margin: 2px 0;
+        font-size: 14px;
     }
-
+    
     #combo-counter {
-        font-size: 36px;
+        font-size: 18px;
     }
-
+    
     #volume-controls {
-        top: auto;
-        bottom: 20px;
-        right: 20px;
+        bottom: 5px;
+        right: 5px;
+    }
+    
+    .modal {
+        width: 90%;
+        max-height: 80vh;
+        padding: 15px;
+    }
+    
+    .modal h2 {
+        font-size: 20px;
+    }
+    
+    .powerup-item {
+        font-size: 12px;
+    }
+    
+    #achievements-popup {
+        width: 80%;
+        padding: 10px;
     }
 }
 
@@ -426,8 +474,9 @@ body {
 /* UI Elements */
 .power-meter {
     position: absolute;
-    left: 20px;
-    top: 20px;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
     width: 200px;
     height: 20px;
     background: rgba(0, 0, 0, 0.5);
@@ -438,8 +487,9 @@ body {
 
 .power-fill {
     height: 100%;
-    background: linear-gradient(90deg, #4CAF50, #FFC107, #F44336);
-    transition: width 0.1s;
+    width: 0%;
+    background: linear-gradient(to right, green, yellow, red);
+    transition: width 0.05s linear;
 }
 
 .score-popup {
@@ -531,31 +581,43 @@ body {
 /* Chat System */
 #chat-container {
     position: absolute;
-    right: 10px;
     bottom: 10px;
+    left: 10px;
     width: 300px;
-    height: 200px;
-    background: rgba(0, 0, 0, 0.8);
+    max-width: 90%;
+    background: rgba(0, 0, 0, 0.7);
     border-radius: 10px;
-    display: flex;
-    flex-direction: column;
+    padding: 10px;
+    display: none;
 }
 
 #chat-messages {
-    flex-grow: 1;
+    height: 150px;
     overflow-y: auto;
-    padding: 10px;
+    margin-bottom: 10px;
     color: white;
+    font-size: 14px;
+}
+
+#chat-form {
+    display: flex;
 }
 
 #chat-input {
-    width: calc(100% - 20px);
-    margin: 10px;
+    flex-grow: 1;
     padding: 5px;
     border: none;
     border-radius: 5px;
-    background: rgba(255, 255, 255, 0.1);
+    margin-right: 5px;
+}
+
+#chat-send {
+    background: #4CAF50;
     color: white;
+    border: none;
+    border-radius: 5px;
+    padding: 5px 10px;
+    cursor: pointer;
 }
 
 /* Animations */
